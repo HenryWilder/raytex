@@ -1,16 +1,7 @@
 #ifndef RAYTEX_H
 #define RAYTEX_H
 #include <stdarg.h>
-
-#ifndef RL_COLOR_TYPE
-// Color, 4 components, R8G8B8A8 (32bit)
-typedef struct Color {
-    unsigned char r;        // Color red value
-    unsigned char g;        // Color green value
-    unsigned char b;        // Color blue value
-    unsigned char a;        // Color alpha value
-} Color;
-#endif // !RL_COLOR_TYPE
+#include <raylib.h>
 
 typedef enum {
     TEXSYMBOL_NEQ,
@@ -26,6 +17,8 @@ int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize);
 void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color);
 
 typedef enum {
+    TEXMODE_SPACE,
+    TEXMODE_VSPACE,
     TEXMODE_TEXT,
     TEXMODE_SYMBOL,
     TEXMODE_FRAC,
@@ -35,37 +28,81 @@ typedef enum {
 } TeXMode;
 
 enum {
+    QUAD_SIZE      =          18, // 18 mu
+    THINSPACE_SIZE =           3, //  3 mu
+    BINSPACE_SIZE  =           4, //  4 mu
+    RELSPACE_SIZE  =           5, //  5 mu
+    EXSPACE_SIZE   =          -3, // -3 mu
+    QQUAD_SIZE     = 2*QUAD_SIZE, // 36 mu
+};
+
+#define MU_TO_PIXELS(mu, fontSize) (((mu)*(fontSize))/18)
+
+#define BLANK_TEX CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size = 0 } }                // empty cell (for matrix)
+
+#define QUAD      CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size =      QUAD_SIZE } }   // 18 mu \quad
+#define THINSPACE CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size = THINSPACE_SIZE } }   //  3 mu \,
+#define BINSPACE  CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size =  BINSPACE_SIZE } }   //  4 mu \:
+#define RELSPACE  CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size =  RELSPACE_SIZE } }   //  5 mu \;
+#define EXSPACE   CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size =   EXSPACE_SIZE } }   // -3 mu \!
+#define QQUAD     CLITERAL(RayTeX){ .mode = TEXMODE_SPACE, .space = { .size =     QQUAD_SIZE } }   // 36 mu \qquad
+
+#define VQUAD      CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size =      QUAD_SIZE } } // 18 mu vertical \quad
+#define VTHINSPACE CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size = THINSPACE_SIZE } } //  3 mu vertical \,
+#define VBINSPACE  CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size =  BINSPACE_SIZE } } //  4 mu vertical \:
+#define VRELSPACE  CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size =  RELSPACE_SIZE } } //  5 mu vertical \;
+#define VEXSPACE   CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size =   EXSPACE_SIZE } } // -3 mu vertical \!
+#define VQQUAD     CLITERAL(RayTeX){ .mode = TEXMODE_VSPACE, .space = { .size =     QQUAD_SIZE } } // 36 mu vertical \qquad
+
+typedef enum {
+    HORIZONTAL_TEXALIGN_TOP,
+    HORIZONTAL_TEXALIGN_CENTER,
+    HORIZONTAL_TEXALIGN_BOTTOM,
+
+    VERTICAL_TEXALIGN_LEFT   = HORIZONTAL_TEXALIGN_TOP,
+    VERTICAL_TEXALIGN_CENTER = HORIZONTAL_TEXALIGN_CENTER,
+    VERTICAL_TEXALIGN_RIGHT  = HORIZONTAL_TEXALIGN_BOTTOM,
+} TeXAlign;
+
+enum {
     TEX_FRAC_NUMERATOR   = 0,
     TEX_FRAC_DENOMINATOR = 1,
 };
 
 typedef struct RayTeX {
-    TeXMode mode;
+    Color overrideColor;
+    int overrideFontSize;
+    Font *overrideFont;               // NULL if not overriding
+    int isOverridingColor    : 1;     // bool
+    int isOverridingFontSize : 1;     // bool
+    int fillsParentCrossAxis : 1;     // bool
+    int mode : (sizeof(int) * 8 - 3); // TeXMode
     union {
         struct {
-            int fontSize;
-            Color color;
+            int size;               // Measured in mu (18 mu = current font size)
+        } space;
+
+        struct {
             RayTexSymbol content;
         } symbol;
 
         struct {
-            int fontSize;
-            Color color;
             const char *content;
         } text;
 
         struct {
             int spacing;            // Space between bottom of numerator and top of denominator
-            Color color;
             struct RayTeX *content; // Exactly 2 elements
         } frac;
 
         struct {
+            TeXAlign alignContent;
             int elementCount;
             struct RayTeX *content; // elementCount elements
         } horizontal;
 
         struct {
+            TeXAlign alignContent;
             int elementCount;
             struct RayTeX *content; // elementCount elements
         } vertical;
@@ -78,78 +115,32 @@ typedef struct RayTeX {
     };
 } RayTeX;
 
-typedef enum {
-    TEXFIELD_TEXT_FONTSIZE,   // int
-    TEXFIELD_TEXT_COLOR,      // Color
-    TEXFIELD_TEXT_CONTENT,    // RayTexSymbol
+int MeasureRayTeXWidthEx(Font font, RayTeX tex, int fontSize);
+int MeasureRayTeXHeightEx(Font font, RayTeX tex, int fontSize);
 
-    TEXFIELD_SYMBOL_FONTSIZE, // int
-    TEXFIELD_SYMBOL_COLOR,    // Color
-    TEXFIELD_SYMBOL_CONTENT,  // const char*
+int MeasureRayTeXWidth(RayTeX tex, int fontSize);
+int MeasureRayTeXHeight(RayTeX tex, int fontSize);
 
-    TEXFIELD_FRAC_SPACING,    // int
-    TEXFIELD_FRAC_COLOR,      // Color
+RayTeX SetRayTeXColor(RayTeX tex, Color color);     // Sets the TeX color
+RayTeX SetRayTeXFontSize(RayTeX tex, int fontSize); // Sets the TeX font size
+RayTeX SetRayTeXFont(RayTeX tex, Font font);        // Sets the TeX font
 
-    // All other members should be pathed instead of set.
-    // Modifying TeX structure invalidates all saved paths.
-} TeXField;
-
-typedef enum {
-    TEXPATHPARTKIND_FIELD, // field
-    TEXPATHPARTKIND_CHILD, // index
-    TEXPATHPARTKIND_CELL,  // row, column
-} TeXPathPartKind;
-
-struct RayTeXPathBuilder;
-typedef struct RayTeXPathBuilder RayTeXPathBuilder;
-
-typedef struct RayTeXPathPart {
-    TeXPathPartKind kind;
-    union {
-        // End of path
-        TeXField field;
-
-        // Horizontal/Vertical
-        int index;
-
-        // Matrix
-        struct {
-            int rowIndex;
-            int columnIndex;
-        };
-    };
-} RayTeXPathPart;
-
-typedef struct RayTeXPath {
-    RayTeXPathPart *parts; // terminated by TEXPATHPARTKIND_FIELD
-} RayTeXPath;
-
-int MeasureRayTeXWidth(RayTeX tex);
-int MeasureRayTeXHeight(RayTeX tex);
-
-RayTeX GenRayTeXBlank();
-RayTeX GenRayTeXText(const char *content, int fontSize, Color color);
-RayTeX GenRayTeXSymbol(RayTexSymbol symbol, int fontSize, Color color);
-RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator, int spacing, Color color);
-RayTeX GenRayTeXHorizontal(int count, ...);
-RayTeX GenRayTeXVertical(int count, ...);
+RayTeX GenRayTeXSpace(int mu);
+RayTeX GenRayTeXVSpace(int mu);
+RayTeX GenRayTeXText(const char *content);
+RayTeX GenRayTeXSymbol(RayTexSymbol symbol);
+RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator, int spacing);
+RayTeX GenRayTeXHorizontal(TeXAlign alignContent, int count, ...);
+RayTeX GenRayTeXVertical(TeXAlign alignContent, int count, ...);
 RayTeX GenRayTeXMatrix(int rowCount, int columnCount, ...);
-
-RayTeXPathBuilder *GetRayTeXElementFieldLocation(RayTeX tex, TeXField field);
-RayTeXPathBuilder *GetRayTeXFieldLocation(RayTeXPathBuilder *path, TeXField field);
-RayTeXPathBuilder *GetRayTeXElementSubLocation(RayTeX tex, int index); // Frac, Horizontal, Vertical
-RayTeXPathBuilder *GetRayTeXSubLocation(RayTeXPathBuilder *path, int index); // Frac, Horizontal, Vertical
-RayTeXPathBuilder *GetRayTeXMatrixElementSubLocation(RayTeX tex, int rowIndex, int columnIndex); // Matrix
-RayTeXPathBuilder *GetRayTeXMatrixSubLocation(RayTeXPathBuilder *tex, int rowIndex, int columnIndex); // Matrix
-void UnloadRayTeXPathBuilder(RayTeXPathBuilder *builder, RayTeXPathBuilder *untilBuilder);
-void UnloadRayTeXPathBuilderCompletely(RayTeXPathBuilder *builder);
-
-RayTeXPath GenRayTeXPath(RayTeXPathBuilder* builder);
-void UnloadRayTeXPath(RayTeXPath path);
-void SetRayTeXValue(RayTeX tex, RayTeXPath path, void* value);
-
 void UnloadRayTeX(RayTeX tex); // All children will also be unloaded
 
-void DrawRayTeX(RayTeX tex, int x, int y);
+void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color);
+void DrawRayTeXCenteredEx(Font font, RayTeX tex, int x, int y, int width, int height, int fontSize, Color color);
+void DrawRayTeXCenteredRecEx(Font font, RayTeX tex, Rectangle rec, int fontSize, Color color);
+
+void DrawRayTeX(RayTeX tex, int x, int y, int fontSize, Color color);
+void DrawRayTeXCentered(RayTeX tex, int x, int y, int width, int height, int fontSize, Color color);
+void DrawRayTeXCenteredRec(RayTeX tex, Rectangle rec, int fontSize, Color color);
 
 #endif

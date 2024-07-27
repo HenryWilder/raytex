@@ -11,28 +11,24 @@ int main()
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
     SetTargetFPS(240);
 
-    RayTeX tex = GenRayTeXFrac(
-        GenRayTeXFrac(
-            GenRayTeXText("apple",  20, BLACK),
-            GenRayTeXText("orange", 20, BLACK), 5, BLACK),
-        GenRayTeXFrac(
-            GenRayTeXText("banana", 20, BLACK),
-            GenRayTeXText("mango",  20, BLACK), 5, BLACK), 5, BLACK);
-
-    RayTeXPath path1 = GenRayTeXPath(
-        GetRayTeXSubLocation(tex, )
-    );
+    RayTeX tex = GenRayTeXVertical(VERTICAL_TEXALIGN_CENTER, 3,
+        GenRayTeXHorizontal(HORIZONTAL_TEXALIGN_CENTER, 3,
+            GenRayTeXText("Apples"),
+            GenRayTeXSymbol(TEXSYMBOL_NEQ),
+            GenRayTeXFrac(
+                GenRayTeXText("Apples"),
+                GenRayTeXText("Oranges"),
+                4)),
+        GenRayTeXSymbol(TEXSYMBOL_NEQ),
+        GenRayTeXText("Oranges"));
 
     while (!WindowShouldClose())
     {
-
-
-        int width  = MeasureRayTeXWidth (tex);
-        int height = MeasureRayTeXHeight(tex);
-
         BeginDrawing();
         ClearBackground(RAYWHITE);
-        DrawRayTeX(tex, (windowWidth - width) / 2, (windowHeight - height) / 2);
+
+        DrawRayTeXCentered(tex, 0, 0, windowWidth, windowHeight, 20, BLACK);
+
         DrawFPS(0,0);
         EndDrawing();
     }
