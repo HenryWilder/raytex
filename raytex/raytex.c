@@ -1,8 +1,11 @@
 #include <string.h>
+#include <stdlib.h>
 #include <raylib.h>
 #include "raytex.h"
 
-#define TEX_BUFFER_SIZE 4096
+enum {
+    TEXFRAC_THICKNESS = 1,
+};
 
 RayTexSymbol RayTeXSymbolFromName(const char *name)
 {
@@ -10,7 +13,6 @@ RayTexSymbol RayTeXSymbolFromName(const char *name)
     if (strcmp(name, "neq") == 0) return TEXSYMBOL_NEQ;
 
     TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \"%s\"", name);
-    return -1;
 }
 
 int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
@@ -20,9 +22,7 @@ int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
     case TEXSYMBOL_NEQ:
         return MeasureText("=", fontSize);
 
-    default:
-        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
-        return MeasureText("?", fontSize) + 4;
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol [%i]", symbol);
     }
 }
 
@@ -33,9 +33,7 @@ int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize)
     case TEXSYMBOL_NEQ:
         return fontSize;
 
-    default:
-        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
-        return fontSize;
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol [%i]", symbol);
     }
 }
 
@@ -48,193 +46,144 @@ void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color col
     {
     case TEXSYMBOL_NEQ:
         DrawText("=", x, y, fontSize, color);
-        Vector2 crossBottomLeft = { x, y + height };
-        Vector2 crossTopRight = { x + width, y };
+        Vector2 crossBottomLeft = { (float)x, (float)(y + height) };
+        Vector2 crossTopRight = { (float)(x + width), (float)y };
         DrawLineEx(crossBottomLeft, crossTopRight, (float)(fontSize / fontBaseSize), color);
         break;
 
-    default:
-        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
-        DrawRectangleLines(x, y, MeasureText("?", fontSize) + 4, fontSize, color);
-        DrawText("?", x + 2, y, fontSize, color);
-        break;
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol [%i]", symbol);
     }
 }
 
 int MeasureRayTeXWidth(RayTeX tex)
 {
-    return 0;
+    switch (tex.mode)
+    {
+    case TEXMODE_MODE_TEXT:
+        return MeasureText(tex.text, tex.fontSize);
+
+    case TEXMODE_MODE_SYMBOL:
+        return MeasureRayTeXSymbolWidth(tex.symbol, tex.fontSize);
+
+    case TEXMODE_MODE_FRAC:
+    {
+        int numeratorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_NUMERATOR]);
+        int denominatorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_DENOMINATOR]);
+        return (numeratorWidth > denominatorWidth ? numeratorWidth : denominatorWidth) + tex.spacing;
+    }
+
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
+    }
 }
 
 int MeasureRayTeXHeight(RayTeX tex)
 {
-    return 0;
+    switch (tex.mode)
+    {
+    case TEXMODE_MODE_TEXT:
+        return tex.fontSize;
+
+    case TEXMODE_MODE_SYMBOL:
+        return MeasureRayTeXSymbolHeight(tex.symbol, tex.fontSize);
+
+    case TEXMODE_MODE_FRAC:
+    {
+        int numeratorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_NUMERATOR]);
+        int denominatorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_DENOMINATOR]);
+        return numeratorHeight + tex.spacing * 2 + TEXFRAC_THICKNESS + denominatorHeight;
+    }
+
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
+    }
 }
 
-RayTeX GenRayTeXText(const char *content, int mode, int fontSize, Color color)
+RayTeX GenRayTeXText(const char *content, int fontSize, Color color)
 {
     return CLITERAL(RayTeX)
     {
         .mode = TEXMODE_MODE_TEXT,
-        .fontSize = fontSize,
         .color = color,
-        .childCount = 0,
-        .children = NULL,
-        .content = content,
+        .fontSize = fontSize,
+        .text = content,
+    };
+}
+
+RayTeX GenRayTeXSymbol(RayTexSymbol symbol, int fontSize, Color color)
+{
+    return CLITERAL(RayTeX)
+    {
+        .mode = TEXMODE_MODE_SYMBOL,
+        .color = color,
+        .fontSize = fontSize,
+        .symbol = symbol,
+    };
+}
+
+// WARNING: Shallow copies of the numerator and denominator are created.
+// Unloading them will also unload them in the fraction, and unloading the fraction will unload them.
+RayTeX GenRayTeXFraction(RayTeX numerator, RayTeX denominator, int spacing, Color color)
+{
+    RayTeX *frac = RL_MALLOC(sizeof(RayTeX) * 2);
+    if (frac == NULL)
+    {
+        TRACELOG(LOG_ERROR, "RAYTEX: GenRayTeXFraction() failed to allocate");
+        return;
+    }
+    frac[TEXFRAC_NUMERATOR] = numerator;
+    frac[TEXFRAC_DENOMINATOR] = denominator;
+    return CLITERAL(RayTeX)
+    {
+        .mode = TEXMODE_MODE_FRAC,
+        .color = color,
+        .spacing = spacing,
+        .frac = frac,
     };
 }
 
 void UnloadRayTeX(RayTeX tex)
 {
-    for (int i = 0; i < tex.childCount; ++i)
+    if (tex.mode == TEXMODE_MODE_FRAC)
     {
-        UnloadRayTeX(tex.children[i]);
+        UnloadRayTeX(tex.frac[TEXFRAC_NUMERATOR]);
+        UnloadRayTeX(tex.frac[TEXFRAC_DENOMINATOR]);
+        RL_FREE(tex.frac);
     }
-    RL_FREE(tex.children);
-}
-
-void AttachRayTeXChild(RayTeX *parent, RayTeX child, int index)
-{
-    if (index < 0)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: AttachRayTeXChild() index (%i) cannot be negative", index);
-        //index = 0;
-    }
-    else if (index > parent->childCount)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: AttachRayTeXChild() index (%i) cannot be higher than the index after the last child (%i)", index, parent->childCount);
-        //index = parent->childCount;
-    }
-
-    int newChildCount = parent->childCount + 1;
-    RL_REALLOC(parent->children, newChildCount);
-    for (int i = newChildCount; i > index; --i)
-    {
-        parent->children[i] = parent->children[i - 1];
-    }
-    parent->childCount = newChildCount;
-    parent->children[index] = child;
-}
-
-RayTeX DetachRayTeXChild(RayTeX *parent, int index)
-{
-    int lastChildIndex = parent->childCount - 1;
-    if (index < 0)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: DetachRayTeXChild() index (%i) cannot be negative", index);
-        //index = 0;
-    }
-    else if (index > lastChildIndex)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: DetachRayTeXChild() index (%i) cannot be higher than the index of the last child (%i)", index, lastChildIndex);
-        //index = lastChildIndex;
-    }
-
-    RayTeX detachedChild = parent->children[index];
-    
-    int newChildCount = parent->childCount - 1;
-    for (int i = index; i < newChildCount; ++i)
-    {
-        parent->children[i] = parent->children[i + 1];
-    }
-    parent->childCount = newChildCount;
-
-    return detachedChild;
-}
-
-RayTeX *GetRayTeXChild(RayTeX parent, int index)
-{
-    int lastChildIndex = parent.childCount - 1;
-    if (index < 0)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: GetRayTeXChild() index (%i) cannot be negative", index);
-        //index = 0;
-    }
-    else if (index > lastChildIndex)
-    {
-        TRACELOG(LOG_WARNING, "RAYTEX: GetRayTeXChild() index (%i) cannot be higher than the index of the last child (%i)", index, lastChildIndex);
-        //index = lastChildIndex;
-    }
-
-    return &(parent.children[index]);
-}
-
-void SetRayTeXChildMode(RayTeX parent, int index, int mode)
-{
-    parent.children[index].mode = mode;
-}
-
-void SetRayTeXChildFontSize(RayTeX parent, int index, int fontSize)
-{
-    parent.children[index].fontSize = fontSize;
-}
-
-void SetRayTeXChildColor(RayTeX parent, int index, Color color)
-{
-    parent.children[index].color = color;
-}
-
-void SetRayTeXChildContent(RayTeX parent, int index, const char *content)
-{
-    parent.children[index].content = content;
 }
 
 void DrawRayTeX(RayTeX tex, int x, int y)
 {
-    int xOffset = 0;
-    int yOffset = 0;
-    const char *content = tex.content;
-    char buffer[TEX_BUFFER_SIZE] = "";
-    bool isInSymbol = false;
-    while (*content != '\0')
+    switch (tex.mode)
     {
-        int iBuffer = 0;
-        if (!isInSymbol)
-        {
-            for (; iBuffer < TEX_BUFFER_SIZE && *content != '\0'; ++content, ++iBuffer)
-            {
-                if (*content == '\\')
-                {
-                    if (*(content + 1) == '\0')
-                    {
-                        TRACELOG(LOG_WARNING, "RAYTEX: DrawRayTeX() content cannot end with \'\\\'");
-                    }
+    case TEXMODE_MODE_TEXT:
+        DrawText(tex.text, x, y, tex.fontSize, tex.color);
+        break;
 
-                    if (*(content + 1) != '\\')
-                    {
-                        isInSymbol = true;
-                        break;
-                    }
-                }
-                buffer[iBuffer] = *content;
-            }
-            buffer[iBuffer] = '\0';
-            DrawText(buffer, x + xOffset, y + yOffset, tex.fontSize, tex.color);
-            xOffset += MeasureText(buffer, tex.fontSize);
-        }
-        else
-        {
-            ++content; // Consume '\\' character
-            for (; *content != '\0'; ++content, ++iBuffer)
-            {
-                if (iBuffer >= TEX_BUFFER_SIZE)
-                {
-                    TRACELOG(LOG_WARNING, "RAYTEX: DrawRayTeX() command cannot be longer than %i characters", TEX_BUFFER_SIZE);
-                }
+    case TEXMODE_MODE_SYMBOL:
+        DrawRayTeXSymbol(tex.symbol, x, y, tex.fontSize, tex.color);
+        break;
 
-                char ch = *content;
-                if (!(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'))
-                {
-                    isInSymbol = false;
-                    break;
-                }
+    case TEXMODE_MODE_FRAC:
+    {
+        RayTeX numerator = tex.frac[TEXFRAC_NUMERATOR];
+        RayTeX denominator = tex.frac[TEXFRAC_DENOMINATOR];
+        int numeratorHeight = MeasureRayTeXHeight(numerator);
 
-                buffer[iBuffer] = *content;
-            }
-            buffer[iBuffer] = '\0';
-            RayTexSymbol symbol = RayTeXSymbolFromName(buffer);
-            DrawRayTeXSymbol(symbol, x + xOffset, y + yOffset, tex.fontSize, tex.color);
-            xOffset += MeasureRayTeXSymbolWidth(symbol, tex.fontSize);
-        }
+        int width = MeasureRayTeXWidth(tex);
+
+        int numeratorWidth = MeasureRayTeXWidth(numerator);
+        int numeratorPaddingLeft = (width - numeratorWidth) / 2;
+
+        int denominatorWidth = MeasureRayTeXWidth(denominator);
+        int denominatorPaddingLeft = (width - denominatorWidth) / 2;
+
+        int dividerLineY = y + numeratorHeight + tex.spacing;
+
+        DrawRayTeX(numerator, x + numeratorPaddingLeft, y);
+        DrawRectangle(x, dividerLineY, width, TEXFRAC_THICKNESS, tex.color);
+        DrawRayTeX(denominator, x + denominatorPaddingLeft, dividerLineY + tex.spacing);
+    }
+        break;
+
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
     }
 }

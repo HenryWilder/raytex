@@ -7,7 +7,10 @@ int main()
     InitWindow(1280, 720, "RayTeX Example");
     SetTargetFPS(60);
 
-    RayTeX tex = GenRayTeXText("This sentence \\neq true", TEXMODE_MODE_TEXT, 20, WHITE);
+    RayTeX tex = GenRayTeXFraction(
+        GenRayTeXText("apple", 20, WHITE),
+        GenRayTeXText("orange", 20, WHITE),
+        3, WHITE);
 
     while (!WindowShouldClose())
     {

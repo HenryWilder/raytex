@@ -30,6 +30,7 @@ typedef enum {
 
 #define TEX_BACKSLASH "\\\\"
 #define TEX_NEQ       "\\neq"
+#define TEX_HRULE     "\\hrule"
 
 RayTexSymbol RayTeXSymbolFromName(const char *name);
 int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize);
@@ -38,32 +39,37 @@ void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color col
 
 typedef enum {
     TEXMODE_MODE_TEXT,
-    TEXMODE_MODE_MATH,
+    TEXMODE_MODE_SYMBOL,
+    TEXMODE_MODE_FRAC,
 } TeXMode;
 
+enum {
+    TEXFRAC_NUMERATOR   = 0,
+    TEXFRAC_DENOMINATOR = 1,
+};
+
 typedef struct RayTeX {
-    int mode;
-    int fontSize;
+    TeXMode mode;
     Color color;
-    int childCount;
-    struct RayTeX *children;
-    const char *content;
+    union {
+        int fontSize;
+        int spacing;
+    };
+    union {
+        RayTexSymbol symbol;
+        const char *text;   // Space between bottom of numerator and top of denominator
+        struct RayTeX *frac; // Exactly 2 elements
+    };
 } RayTeX;
 
 int MeasureRayTeXWidth(RayTeX tex);
 int MeasureRayTeXHeight(RayTeX tex);
 
-RayTeX GenRayTeXText(const char *content, int mode, int fontSize, Color color);
+RayTeX GenRayTeXText(const char *content, int fontSize, Color color);
+RayTeX GenRayTeXSymbol(RayTexSymbol symbol, int fontSize, Color color);
+RayTeX GenRayTeXFraction(RayTeX numerator, RayTeX denominator, int spacing, Color color);
+
 void UnloadRayTeX(RayTeX tex);                                                     // All children will also be unloaded
-
-void AttachRayTeXChild(RayTeX *parent, RayTeX child, int index);
-RayTeX DetachRayTeXChild(RayTeX *parent, int index);
-
-RayTeX *GetRayTeXChild(RayTeX parent, int index);                                  // The child is still attached, but you can access it to attach/detach children
-void SetRayTeXChildMode(RayTeX parent, int index, int mode);
-void SetRayTeXChildFontSize(RayTeX parent, int index, int fontSize);
-void SetRayTeXChildColor(RayTeX parent, int index, Color color);
-void SetRayTeXChildContent(RayTeX parent, int index, const char *content);
 
 void DrawRayTeX(RayTeX tex, int x, int y);
 
