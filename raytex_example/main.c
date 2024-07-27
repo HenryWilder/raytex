@@ -23,8 +23,10 @@ int main()
 
     while (!WindowShouldClose())
     {
-        tex.frac[TEXFRAC_DENOMINATOR].frac[TEXFRAC_NUMERATOR].fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f + sinf(GetTime())));
-        tex.frac[TEXFRAC_NUMERATOR].frac[TEXFRAC_DENOMINATOR].fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f + cosf(GetTime())));
+        tex.frac[TEXFRAC_NUMERATOR]  .frac[TEXFRAC_NUMERATOR]  .fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f - sinf(GetTime())));
+        tex.frac[TEXFRAC_DENOMINATOR].frac[TEXFRAC_NUMERATOR]  .fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f + sinf(GetTime())));
+        tex.frac[TEXFRAC_NUMERATOR]  .frac[TEXFRAC_DENOMINATOR].fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f + cosf(GetTime())));
+        tex.frac[TEXFRAC_DENOMINATOR].frac[TEXFRAC_DENOMINATOR].fontSize = (int)Lerp(10.0f, 80.0f, 0.5f * (1.0f - cosf(GetTime())));
 
         BeginDrawing();
         ClearBackground(BLACK);
