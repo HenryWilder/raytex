@@ -1,18 +1,65 @@
+#include <string.h>
 #include <raylib.h>
 #include "raytex.h"
 
-#if defined(SUPPORT_TRACELOG)
-    #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
+#define TEX_BUFFER_SIZE 4096
 
-    #if defined(SUPPORT_TRACELOG_DEBUG)
-        #define TRACELOGD(...) TraceLog(LOG_DEBUG, __VA_ARGS__)
-    #else
-        #define TRACELOGD(...) (void)0
-    #endif
-#else
-    #define TRACELOG(level, ...) (void)0
-    #define TRACELOGD(...) (void)0
-#endif
+RayTexSymbol RayTeXSymbolFromName(const char *name)
+{
+    // todo: Implement this as a lookup table once there are a lot of symbols
+    if (strcmp(name, "neq") == 0) return TEXSYMBOL_NEQ;
+
+    TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \"%s\"", name);
+    return -1;
+}
+
+int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
+{
+    switch (symbol)
+    {
+    case TEXSYMBOL_NEQ:
+        return MeasureText("=", fontSize);
+
+    default:
+        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
+        return MeasureText("?", fontSize) + 4;
+    }
+}
+
+int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize)
+{
+    switch (symbol)
+    {
+    case TEXSYMBOL_NEQ:
+        return fontSize;
+
+    default:
+        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
+        return fontSize;
+    }
+}
+
+void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color)
+{
+    int width = MeasureRayTeXSymbolWidth(symbol, fontSize);
+    int height = MeasureRayTeXSymbolHeight(symbol, fontSize);
+    int fontBaseSize = GetFontDefault().baseSize;
+    switch (symbol)
+    {
+    case TEXSYMBOL_NEQ:
+        DrawText("=", x, y, fontSize, color);
+        Vector2 crossBottomLeft = { x, y + height };
+        Vector2 crossTopRight = { x + width, y };
+        DrawLineEx(crossBottomLeft, crossTopRight, (float)(fontSize / fontBaseSize), color);
+        break;
+
+    default:
+        TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \'%i\'", symbol);
+        DrawRectangleLines(x, y, MeasureText("?", fontSize) + 4, fontSize, color);
+        DrawText("?", x + 2, y, fontSize, color);
+        break;
+    }
+}
 
 int MeasureRayTeXWidth(RayTeX tex)
 {
@@ -134,5 +181,60 @@ void SetRayTeXChildContent(RayTeX parent, int index, const char *content)
 
 void DrawRayTeX(RayTeX tex, int x, int y)
 {
-    DrawText(tex.content, x, y, tex.fontSize, tex.color);
+    int xOffset = 0;
+    int yOffset = 0;
+    const char *content = tex.content;
+    char buffer[TEX_BUFFER_SIZE] = "";
+    bool isInSymbol = false;
+    while (*content != '\0')
+    {
+        int iBuffer = 0;
+        if (!isInSymbol)
+        {
+            for (; iBuffer < TEX_BUFFER_SIZE && *content != '\0'; ++content, ++iBuffer)
+            {
+                if (*content == '\\')
+                {
+                    if (*(content + 1) == '\0')
+                    {
+                        TRACELOG(LOG_WARNING, "RAYTEX: DrawRayTeX() content cannot end with \'\\\'");
+                    }
+
+                    if (*(content + 1) != '\\')
+                    {
+                        isInSymbol = true;
+                        break;
+                    }
+                }
+                buffer[iBuffer] = *content;
+            }
+            buffer[iBuffer] = '\0';
+            DrawText(buffer, x + xOffset, y + yOffset, tex.fontSize, tex.color);
+            xOffset += MeasureText(buffer, tex.fontSize);
+        }
+        else
+        {
+            ++content; // Consume '\\' character
+            for (; *content != '\0'; ++content, ++iBuffer)
+            {
+                if (iBuffer >= TEX_BUFFER_SIZE)
+                {
+                    TRACELOG(LOG_WARNING, "RAYTEX: DrawRayTeX() command cannot be longer than %i characters", TEX_BUFFER_SIZE);
+                }
+
+                char ch = *content;
+                if (!(ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z'))
+                {
+                    isInSymbol = false;
+                    break;
+                }
+
+                buffer[iBuffer] = *content;
+            }
+            buffer[iBuffer] = '\0';
+            RayTexSymbol symbol = RayTeXSymbolFromName(buffer);
+            DrawRayTeXSymbol(symbol, x + xOffset, y + yOffset, tex.fontSize, tex.color);
+            xOffset += MeasureRayTeXSymbolWidth(symbol, tex.fontSize);
+        }
+    }
 }
