@@ -69,7 +69,7 @@ int MeasureRayTeXWidth(RayTeX tex)
     {
         int numeratorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_NUMERATOR]);
         int denominatorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_DENOMINATOR]);
-        return (numeratorWidth > denominatorWidth ? numeratorWidth : denominatorWidth) + tex.spacing;
+        return (numeratorWidth > denominatorWidth ? numeratorWidth : denominatorWidth) + tex.spacing * 2;
     }
 
     default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
@@ -90,7 +90,7 @@ int MeasureRayTeXHeight(RayTeX tex)
     {
         int numeratorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_NUMERATOR]);
         int denominatorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_DENOMINATOR]);
-        return numeratorHeight + tex.spacing * 2 + TEXFRAC_THICKNESS + denominatorHeight;
+        return numeratorHeight + denominatorHeight + tex.spacing * 2 + TEXFRAC_THICKNESS;
     }
 
     default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
@@ -176,11 +176,22 @@ void DrawRayTeX(RayTeX tex, int x, int y)
         int denominatorWidth = MeasureRayTeXWidth(denominator);
         int denominatorPaddingLeft = (width - denominatorWidth) / 2;
 
-        int dividerLineY = y + numeratorHeight + tex.spacing;
+        DrawRayTeX(
+            numerator,
+            x + numeratorPaddingLeft,
+            y);
 
-        DrawRayTeX(numerator, x + numeratorPaddingLeft, y);
-        DrawRectangle(x, dividerLineY, width, TEXFRAC_THICKNESS, tex.color);
-        DrawRayTeX(denominator, x + denominatorPaddingLeft, dividerLineY + tex.spacing);
+        DrawRectangle(
+            x,
+            y + numeratorHeight + tex.spacing,
+            width,
+            TEXFRAC_THICKNESS,
+            tex.color);
+
+        DrawRayTeX(
+            denominator,
+            x + denominatorPaddingLeft,
+            y + numeratorHeight + tex.spacing * 2 + TEXFRAC_THICKNESS);
     }
         break;
 
