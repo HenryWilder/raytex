@@ -1,19 +1,6 @@
 #ifndef RAYTEX_H
 #define RAYTEX_H
 
-#ifdef SUPPORT_TRACELOG
-    #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
-
-    #ifdef SUPPORT_TRACELOG_DEBUG
-        #define TRACELOGD(...) TraceLog(LOG_DEBUG, __VA_ARGS__)
-    #else
-        #define TRACELOGD(...) (void)0
-    #endif
-#else
-    #define TRACELOG(level, ...) (void)0
-    #define TRACELOGD(...) (void)0
-#endif
-
 #ifndef RL_COLOR_TYPE
 // Color, 4 components, R8G8B8A8 (32bit)
 typedef struct Color {
@@ -44,8 +31,8 @@ typedef enum {
 } TeXMode;
 
 enum {
-    TEXFRAC_NUMERATOR   = 0,
-    TEXFRAC_DENOMINATOR = 1,
+    TEX_FRAC_NUMERATOR   = 0,
+    TEX_FRAC_DENOMINATOR = 1,
 };
 
 typedef struct RayTeX {

@@ -3,6 +3,8 @@
 #include <raylib.h>
 #include "raytex.h"
 
+#define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
+
 enum {
     TEXFRAC_THICKNESS = 1,
 };
@@ -67,8 +69,8 @@ int MeasureRayTeXWidth(RayTeX tex)
 
     case TEXMODE_MODE_FRAC:
     {
-        int numeratorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_NUMERATOR]);
-        int denominatorWidth = MeasureRayTeXWidth(tex.frac[TEXFRAC_DENOMINATOR]);
+        int numeratorWidth = MeasureRayTeXWidth(tex.frac[TEX_FRAC_NUMERATOR]);
+        int denominatorWidth = MeasureRayTeXWidth(tex.frac[TEX_FRAC_DENOMINATOR]);
         return (numeratorWidth > denominatorWidth ? numeratorWidth : denominatorWidth) + tex.spacing * 2;
     }
 
@@ -88,8 +90,8 @@ int MeasureRayTeXHeight(RayTeX tex)
 
     case TEXMODE_MODE_FRAC:
     {
-        int numeratorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_NUMERATOR]);
-        int denominatorHeight = MeasureRayTeXHeight(tex.frac[TEXFRAC_DENOMINATOR]);
+        int numeratorHeight = MeasureRayTeXHeight(tex.frac[TEX_FRAC_NUMERATOR]);
+        int denominatorHeight = MeasureRayTeXHeight(tex.frac[TEX_FRAC_DENOMINATOR]);
         return numeratorHeight + denominatorHeight + tex.spacing * 2 + TEXFRAC_THICKNESS;
     }
 
@@ -99,55 +101,56 @@ int MeasureRayTeXHeight(RayTeX tex)
 
 RayTeX GenRayTeXText(const char *content, int fontSize, Color color)
 {
-    return CLITERAL(RayTeX)
-    {
-        .mode = TEXMODE_MODE_TEXT,
-        .color = color,
-        .fontSize = fontSize,
-        .text = content,
-    };
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_MODE_TEXT;
+    element.color = color;
+    element.fontSize = fontSize;
+    element.text = content;
+    TRACELOG(LOG_INFO, "RAYTEX: TeX text element generated successfully");
+    return element;
 }
 
 RayTeX GenRayTeXSymbol(RayTexSymbol symbol, int fontSize, Color color)
 {
-    return CLITERAL(RayTeX)
-    {
-        .mode = TEXMODE_MODE_SYMBOL,
-        .color = color,
-        .fontSize = fontSize,
-        .symbol = symbol,
-    };
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_MODE_SYMBOL;
+    element.color = color;
+    element.fontSize = fontSize;
+    element.symbol = symbol;
+    TRACELOG(LOG_INFO, "RAYTEX: TeX symbol element generated successfully");
+    return element;
 }
 
 // WARNING: Shallow copies of the numerator and denominator are created.
-// Unloading them will also unload them in the fraction, and unloading the fraction will unload them.
+// Unloading them outside of the fraction will also unload them for the fraction,
+// and unloading the fraction will also unload them outside of the fraction.
 RayTeX GenRayTeXFraction(RayTeX numerator, RayTeX denominator, int spacing, Color color)
 {
-    RayTeX *frac = RL_MALLOC(sizeof(RayTeX) * 2);
-    if (frac == NULL)
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_MODE_FRAC;
+    element.color = color;
+    element.spacing = spacing;
+    element.frac = RL_MALLOC(sizeof(RayTeX) * 2);
+    if (element.frac != NULL)
     {
-        TRACELOG(LOG_ERROR, "RAYTEX: GenRayTeXFraction() failed to allocate");
-        return;
+        element.frac[TEX_FRAC_NUMERATOR] = numerator;
+        element.frac[TEX_FRAC_DENOMINATOR] = denominator;
+        TRACELOG(LOG_INFO, "RAYTEX: Tex fraction element generated successfully");
     }
-    frac[TEXFRAC_NUMERATOR] = numerator;
-    frac[TEXFRAC_DENOMINATOR] = denominator;
-    return CLITERAL(RayTeX)
-    {
-        .mode = TEXMODE_MODE_FRAC,
-        .color = color,
-        .spacing = spacing,
-        .frac = frac,
-    };
+    else TRACELOG(LOG_ERROR, "RAYTEX: GenRayTeXFraction() failed to allocate");
+    return element;
 }
 
 void UnloadRayTeX(RayTeX tex)
 {
     if (tex.mode == TEXMODE_MODE_FRAC)
     {
-        UnloadRayTeX(tex.frac[TEXFRAC_NUMERATOR]);
-        UnloadRayTeX(tex.frac[TEXFRAC_DENOMINATOR]);
+        UnloadRayTeX(tex.frac[TEX_FRAC_NUMERATOR]);
+        UnloadRayTeX(tex.frac[TEX_FRAC_DENOMINATOR]);
         RL_FREE(tex.frac);
     }
+
+    TRACELOG(LOG_INFO, "RAYTEX: TeX element unloaded successfully");
 }
 
 void DrawRayTeX(RayTeX tex, int x, int y)
@@ -164,8 +167,8 @@ void DrawRayTeX(RayTeX tex, int x, int y)
 
     case TEXMODE_MODE_FRAC:
     {
-        RayTeX numerator = tex.frac[TEXFRAC_NUMERATOR];
-        RayTeX denominator = tex.frac[TEXFRAC_DENOMINATOR];
+        RayTeX numerator = tex.frac[TEX_FRAC_NUMERATOR];
+        RayTeX denominator = tex.frac[TEX_FRAC_DENOMINATOR];
         int numeratorHeight = MeasureRayTeXHeight(numerator);
 
         int width = MeasureRayTeXWidth(tex);
