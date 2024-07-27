@@ -11,21 +11,21 @@ int main()
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
     SetTargetFPS(240);
 
-    RayTeX tex = GenRayTeXFraction(
-        GenRayTeXFraction(
+    RayTeX tex = GenRayTeXFrac(
+        GenRayTeXFrac(
             GenRayTeXText("apple",  20, BLACK),
             GenRayTeXText("orange", 20, BLACK), 5, BLACK),
-        GenRayTeXFraction(
+        GenRayTeXFrac(
             GenRayTeXText("banana", 20, BLACK),
             GenRayTeXText("mango",  20, BLACK), 5, BLACK), 5, BLACK);
 
+    RayTeXPath path1 = GenRayTeXPath(
+        GetRayTeXSubLocation(tex, )
+    );
+
     while (!WindowShouldClose())
     {
-        tex.frac[TEX_FRAC_NUMERATOR]  .frac[TEX_FRAC_NUMERATOR]  .fontSize = (int)Lerp(10.0f, 80.0f, (float)(0.5 * (1.0 - sin(GetTime()))));
-        tex.frac[TEX_FRAC_DENOMINATOR].frac[TEX_FRAC_NUMERATOR]  .fontSize = (int)Lerp(10.0f, 80.0f, (float)(0.5 * (1.0 + sin(GetTime()))));
-        tex.frac[TEX_FRAC_NUMERATOR]  .frac[TEX_FRAC_DENOMINATOR].fontSize = (int)Lerp(10.0f, 80.0f, (float)(0.5 * (1.0 + cos(GetTime()))));
-        tex.frac[TEX_FRAC_DENOMINATOR].frac[TEX_FRAC_DENOMINATOR].fontSize = (int)Lerp(10.0f, 80.0f, (float)(0.5 * (1.0 - cos(GetTime()))));
-        tex.frac[TEX_FRAC_DENOMINATOR].frac[TEX_FRAC_DENOMINATOR].color = Rainbow(GetTime());
+
 
         int width  = MeasureRayTeXWidth (tex);
         int height = MeasureRayTeXHeight(tex);
