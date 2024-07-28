@@ -12,7 +12,7 @@ enum {
     TEXFRAC_THICKNESS = 1, // Measured in mu
 };
 
-RayTexSymbol RayTeXSymbolFromName(const char *name)
+RayTeXSymbol RayTeXSymbolFromName(const char *name)
 {
     // todo: Implement this as a lookup table once there are a lot of symbols
     if (TextIsEqual(name, "neq")) return TEXSYMBOL_NEQ;
@@ -20,7 +20,7 @@ RayTexSymbol RayTeXSymbolFromName(const char *name)
     TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \"%s\"", name);
 }
 
-Vector2 MeasureRayTeXSymbolEx(Font font, RayTexSymbol symbol, float fontSize)
+Vector2 MeasureRayTeXSymbolEx(Font font, RayTeXSymbol symbol, float fontSize)
 {
     Vector2 size = { 0 };
     switch (symbol)
@@ -38,17 +38,17 @@ Vector2 MeasureRayTeXSymbolEx(Font font, RayTexSymbol symbol, float fontSize)
     return size;
 }
 
-int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
+int MeasureRayTeXSymbolWidth(RayTeXSymbol symbol, int fontSize)
 {
     return (int)MeasureRayTeXSymbolEx(GetFontDefault(), symbol, (float)fontSize).x;
 }
 
-int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize)
+int MeasureRayTeXSymbolHeight(RayTeXSymbol symbol, int fontSize)
 {
     return (int)MeasureRayTeXSymbolEx(GetFontDefault(), symbol, (float)fontSize).y;
 }
 
-void DrawRayTeXSymbolEx(Font font, RayTexSymbol symbol, Vector2 position, float fontSize, Color color)
+void DrawRayTeXSymbolEx(Font font, RayTeXSymbol symbol, Vector2 position, float fontSize, Color color)
 {
     // Todo: Implement these with textures or a custom font at some point
     Vector2 size = MeasureRayTeXSymbolEx(font, symbol, fontSize);
@@ -73,7 +73,7 @@ void DrawRayTeXSymbolEx(Font font, RayTexSymbol symbol, Vector2 position, float 
     }
 }
 
-void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color)
+void DrawRayTeXSymbol(RayTeXSymbol symbol, int x, int y, int fontSize, Color color)
 {
     Vector2 position = { 0 };
     position.x = (float)x;
@@ -363,7 +363,7 @@ RayTeX GenRayTeXTextf(const char *fmt, ...)
     else TRACELOG(LOG_ERROR, "GenRayTeXTextf() failed to allocate");
 }
 
-RayTeX GenRayTeXSymbol(RayTexSymbol symbol)
+RayTeX GenRayTeXSymbol(RayTeXSymbol symbol)
 {
     RayTeX element = { 0 };
     element.mode = TEXMODE_SYMBOL;
@@ -407,7 +407,7 @@ RayTeX GenRayTeXFrac(char fmt0, char fmt1, ...)
         {
             case ' ': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
             case 't': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
-            case 's': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 's': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTeXSymbol))); break;
             case 'i': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
             case 'v': element.frac.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
             case 'p': element.frac.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
@@ -438,7 +438,7 @@ RayTeX GenRayTeXHorizontal(const char *fmt, ...)
             {
             case ' ': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
             case 't': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
-            case 's': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 's': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTeXSymbol))); break;
             case 'i': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
             case 'v': element.horizontal.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
             case 'p': element.horizontal.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
@@ -473,7 +473,7 @@ RayTeX GenRayTeXVertical(const char *fmt, ...)
             {
             case ' ': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
             case 't': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
-            case 's': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 's': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTeXSymbol))); break;
             case 'i': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
             case 'v': element.vertical.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
             case 'p': element.vertical.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
@@ -529,7 +529,7 @@ RayTeX GenRayTeXMatrix(const char *fmt, ...)
             {
             case ' ': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
             case 't': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
-            case 's': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 's': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTeXSymbol))); break;
             case 'i': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
             case 'v': element.matrix.content[index] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
             case 'p': element.matrix.content[index] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;

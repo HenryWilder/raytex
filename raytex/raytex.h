@@ -5,18 +5,18 @@
 
 typedef enum {
     TEXSYMBOL_NEQ,
-} RayTexSymbol;
+} RayTeXSymbol;
 
 #define TEX_BACKSLASH "\\\\"
 #define TEX_NEQ       "\\neq"
 #define TEX_HRULE     "\\hrule"
 
-RayTexSymbol RayTeXSymbolFromName(const char *name);
-Vector2 MeasureRayTeXSymbolEx(Font font, RayTexSymbol symbol, float fontSize);
-int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize);
-int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize);
-void DrawRayTeXSymbolEx(Font font, RayTexSymbol symbol, Vector2 position, float fontSize, Color color);
-void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color);
+RayTeXSymbol RayTeXSymbolFromName(const char *name);
+Vector2 MeasureRayTeXSymbolEx(Font font, RayTeXSymbol symbol, float fontSize);
+int MeasureRayTeXSymbolWidth(RayTeXSymbol symbol, int fontSize);
+int MeasureRayTeXSymbolHeight(RayTeXSymbol symbol, int fontSize);
+void DrawRayTeXSymbolEx(Font font, RayTeXSymbol symbol, Vector2 position, float fontSize, Color color);
+void DrawRayTeXSymbol(RayTeXSymbol symbol, int x, int y, int fontSize, Color color);
 
 typedef enum {
     TEXMODE_SPACE,
@@ -92,7 +92,7 @@ typedef struct RayTeX {
         } space;
 
         struct {
-            RayTexSymbol content;
+            RayTeXSymbol content;
         } symbol;
 
         struct {
@@ -149,12 +149,12 @@ RayTeX GenRayTeXSpace(int mu);
 RayTeX GenRayTeXVSpace(int mu);
 RayTeX GenRayTeXText(const char *content);
 RayTeX GenRayTeXTextf(const char *fmt, ...);      // (sprintf() style)
-RayTeX GenRayTeXSymbol(RayTexSymbol symbol);
+RayTeX GenRayTeXSymbol(RayTeXSymbol symbol);
 RayTeX GenRayTeXFrac(char fmt0, char fmt1, ...);  // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
 RayTeX GenRayTeXHorizontal(const char *fmt, ...); // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
 RayTeX GenRayTeXVertical(const char *fmt, ...);   // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
-RayTeX GenRayTeXMatrix(const char *fmt, ...);     // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value, \
-                                                          '&' for column skip, '\\' for end of row
+RayTeX GenRayTeXMatrix(const char *fmt, ...);     // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value,
+                                                  //      '&' for column skip, '\\' for end of row
 
 // Unloads the tex and all owned children.
 // Any child that was added by value is owned. Any child that was added by pointer is unowned.
