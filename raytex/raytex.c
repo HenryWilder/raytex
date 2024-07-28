@@ -1,7 +1,9 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "raytex.h"
 
+#define MAX_TEXT_BUFFER_LENGTH 1024
 #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
 
 enum {
@@ -119,8 +121,17 @@ static Vector2 rMeasureRayTeX(const Font *font, const RayTeX *tex, float fontSiz
         float maxHeight = 0.0f;
         for (int i = 0; i < tex->horizontal.elementCount; ++i)
         {
-            Vector2 elementSize = rMeasureRayTeX(font, tex->horizontal.content[i].ptr, fontSize);
+            RayTeX *element = tex->horizontal.content[i].ptr;
+            Vector2 elementSize = rMeasureRayTeX(font, element, fontSize);
             totalWidth += elementSize.x;
+
+            if (element->mode == TEXMODE_FRAC)
+            {
+                float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
+                const Vector2 numeratorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
+                const Vector2 denominatorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
+                elementSize.y += (numeratorSize.y - denominatorSize.y + spacing) / 2;
+            }
             if (elementSize.y > maxHeight) maxHeight = elementSize.y;
         }
         size.x = totalWidth;
@@ -330,6 +341,28 @@ RayTeX GenRayTeXText(const char *content)
     return element;
 }
 
+RayTeX GenRayTeXTextf(const char *fmt, ...)
+{
+    char buffer[MAX_TEXT_BUFFER_LENGTH];
+    va_list args;
+    va_start(args, fmt);
+    vsprintf_s(buffer, MAX_TEXT_BUFFER_LENGTH, fmt, args);
+    va_end(args);
+    size_t sizeUsed = sizeof(char) * (strlen(buffer) + 1);
+    char *memory = RL_MALLOC(sizeUsed);
+    if (memory != NULL)
+    {
+        memcpy(memory, buffer, sizeUsed);
+        RayTeX element = { 0 };
+        element.mode = TEXMODE_TEXT;
+        element.text.isOwned = true;
+        element.text.content = memory;
+        TRACELOG(LOG_INFO, "RAYTEX: TeX text element \"%s\" generated successfully", buffer);
+        return element;
+    }
+    else TRACELOG(LOG_ERROR, "GenRayTeXTextf() failed to allocate");
+}
+
 RayTeX GenRayTeXSymbol(RayTexSymbol symbol)
 {
     RayTeX element = { 0 };
@@ -361,39 +394,28 @@ static RayTeXRef RayTeXRefFromPointer(RayTeX *pointer)
     return ref;
 }
 
-RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator)
+RayTeX GenRayTeXFrac(char fmt0, char fmt1, ...)
 {
     RayTeX element = { 0 };
     element.mode = TEXMODE_FRAC;
-    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromValue(numerator);
-    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromValue(denominator);
-    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
-    return element;
-}
-RayTeX GenRayTeXFracVP(RayTeX numerator, RayTeX *denominator)
-{
-    RayTeX element = { 0 };
-    element.mode = TEXMODE_FRAC;
-    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromValue(numerator);
-    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromPointer(denominator);
-    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
-    return element;
-}
-RayTeX GenRayTeXFracPV(RayTeX *numerator, RayTeX denominator)
-{
-    RayTeX element = { 0 };
-    element.mode = TEXMODE_FRAC;
-    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromPointer(numerator);
-    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromValue(denominator);
-    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
-    return element;
-}
-RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator)
-{
-    RayTeX element = { 0 };
-    element.mode = TEXMODE_FRAC;
-    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromPointer(numerator);
-    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromPointer(denominator);
+    va_list args;
+    va_start(args, fmt1);
+    for (int i = 0; i < 2; ++i)
+    {
+        char ch = i == 0 ? fmt0 : fmt1;
+        switch (ch)
+        {
+            case ' ': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
+            case 't': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
+            case 's': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 'i': element.frac.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
+            case 'v': element.frac.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
+            case 'p': element.frac.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
+
+            default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXFrac() at index %i of fmt '%c','%c': meaning of '%c' is unknown", i, fmt0, fmt1, ch);
+        }
+    }
+    va_end(args);
     TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
     return element;
 }
@@ -414,12 +436,12 @@ RayTeX GenRayTeXHorizontal(const char *fmt, ...)
         {
             switch (fmt[i])
             {
-            case 'v':
-                element.horizontal.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));
-                break;
-            case 'p':
-                element.horizontal.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
-                break;
+            case ' ': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
+            case 't': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
+            case 's': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 'i': element.horizontal.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
+            case 'v': element.horizontal.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
+            case 'p': element.horizontal.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
 
             default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXHorizontal() at index %i of fmt \"%s\": meaning of '%c' is unknown", i, fmt, fmt[i]);
             }
@@ -449,12 +471,12 @@ RayTeX GenRayTeXVertical(const char *fmt, ...)
         {
             switch (fmt[i])
             {
-            case 'v':
-                element.vertical.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));
-                break;
-            case 'p':
-                element.vertical.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
-                break;
+            case ' ': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
+            case 't': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
+            case 's': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 'i': element.vertical.content[i] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
+            case 'v': element.vertical.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
+            case 'p': element.vertical.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
 
             default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXVertical() at index %i of fmt \"%s\": meaning of '%c' is unknown", i, fmt, fmt[i]);
             }
@@ -505,27 +527,20 @@ RayTeX GenRayTeXMatrix(const char *fmt, ...)
         {
             switch (*c)
             {
-            case 'v':
-                element.matrix.content[index] = RayTeXRefFromValue(va_arg(args, RayTeX));
-                ++column;
-                break;
-            case 'p':
-                element.matrix.content[index] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
-                ++column;
-                break;
-            case '&':
-                element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX);
-                ++column;
-                break;
+            case ' ': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXSpace(va_arg(args, int)));           break;
+            case 't': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXText(va_arg(args, const char*)));    break;
+            case 's': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXSymbol(va_arg(args, RayTexSymbol))); break;
+            case 'i': element.matrix.content[index] = RayTeXRefFromValue(GenRayTeXTextf("%i", va_arg(args, int)));     break;
+            case 'v': element.matrix.content[index] = RayTeXRefFromValue(va_arg(args, RayTeX));                        break;
+            case 'p': element.matrix.content[index] = RayTeXRefFromPointer(va_arg(args, RayTeX*));                     break;
+            case '&': element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX);
             case '\\':
-                for (; column < columnCount; ++column, ++index)
-                {
-                    element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX);
-                }
+                for (; column < columnCount; ++column, ++index) { element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX); }
                 break;
 
             default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXMatrix() at index %i of fmt \"%s\": meaning of '%c' is unknown", index, fmt, *c);
             }
+            ++column;
 
             if (column == columnCount)
             {
@@ -564,6 +579,7 @@ void UnloadRayTeX(RayTeX tex)
         break;
 
     case TEXMODE_TEXT:
+        if (tex.text.isOwned) RL_FREE(tex.text.content);
         TRACELOG(LOG_INFO, "RAYTEX: TeX text element unloaded successfully");
         break;
 
@@ -614,6 +630,12 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
     if (tex->isOverridingFontSize) fontSize = (float)tex->overrideFontSize;
     if (tex->overrideFont != NULL) font = tex->overrideFont;
 
+    // boxes around everything
+#if 0
+    Vector2 texSize = rMeasureRayTeX(font, tex, fontSize);
+    DrawRectangleLines(position.x, position.y, texSize.x, texSize.y, MAGENTA);
+#endif
+
     switch (tex->mode)
     {
     case TEXMODE_SPACE:
@@ -661,6 +683,20 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
 
     case TEXMODE_HORIZONTAL:
     {
+        float yOffsetExtra = 0.0f;
+        for (int i = 0; i < tex->horizontal.elementCount; ++i)
+        {
+            RayTeX *element = tex->horizontal.content[i].ptr;
+            if (element->mode == TEXMODE_FRAC)
+            {
+                float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
+                const Vector2 numeratorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
+                const Vector2 denominatorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
+                float excess = (numeratorSize.y - denominatorSize.y + spacing) / 2;
+                if (excess > yOffsetExtra) yOffsetExtra = excess;
+            }
+        }
+        position.y += yOffsetExtra;
         Vector2 horizontalSize = rMeasureRayTeX(font, tex, fontSize);
         for (int i = 0; i < tex->horizontal.elementCount; ++i)
         {
@@ -683,7 +719,7 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
     }
         break;
 
-    case TEXMODE_VERTICAL: // todo
+    case TEXMODE_VERTICAL:
     {
         Vector2 verticalSize = rMeasureRayTeX(font, tex, fontSize);
         for (int i = 0; i < tex->vertical.elementCount; ++i)

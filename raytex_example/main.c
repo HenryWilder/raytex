@@ -11,24 +11,20 @@ int main()
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
     SetTargetFPS(60);
 
-    RayTeX tex = GenRayTeXVertical("vvvvv",
+    RayTeX tex = GenRayTeXVertical("vsvsv",
         RayTeXColor(GenRayTeXText("Oranges"), ORANGE),
-        GenRayTeXSymbol(TEXSYMBOL_NEQ),
-        GenRayTeXHorizontal("vvvvv",
-            GenRayTeXFrac(
-                GenRayTeXText("Pineapple"),
-                GenRayTeXText("Strawberry")),
-            GenRayTeXSymbol(TEXSYMBOL_NEQ),
+        TEXSYMBOL_NEQ,
+        GenRayTeXHorizontal("vsvsv",
+            GenRayTeXFrac('t','t', "Pineapple", "Strawberry"),
+            TEXSYMBOL_NEQ,
             RayTeXColor(GenRayTeXText("Apples"), RED),
-            GenRayTeXSymbol(TEXSYMBOL_NEQ),
-            GenRayTeXFrac(
+            TEXSYMBOL_NEQ,
+            GenRayTeXFrac('v','t',
                 GenRayTeXHorizontal("vv",
                     GenRayTeXText("Apples + "),
-                    GenRayTeXFrac(
-                        GenRayTeXText("banana"),
-                        GenRayTeXText("mango"))),
-                GenRayTeXText("Oranges"))),
-        GenRayTeXSymbol(TEXSYMBOL_NEQ),
+                    GenRayTeXFrac('t','t', "banana", "mango")),
+                "Oranges")),
+        TEXSYMBOL_NEQ,
         RayTeXColor(GenRayTeXText("Oranges"), ORANGE));
 
     RayTeX *row2  = RayTeXVerticalChild(&tex, 2);

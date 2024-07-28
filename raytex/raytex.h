@@ -96,6 +96,7 @@ typedef struct RayTeX {
         } symbol;
 
         struct {
+            bool isOwned;
             const char *content;
         } text;
 
@@ -147,14 +148,13 @@ RayTeX *RayTeXMatrixCell(RayTeX *matrixTex, int row, int column); // Returns a p
 RayTeX GenRayTeXSpace(int mu);
 RayTeX GenRayTeXVSpace(int mu);
 RayTeX GenRayTeXText(const char *content);
+RayTeX GenRayTeXTextf(const char *fmt, ...);      // (sprintf() style)
 RayTeX GenRayTeXSymbol(RayTexSymbol symbol);
-RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator);
-RayTeX GenRayTeXFracVP(RayTeX numerator, RayTeX *denominator);
-RayTeX GenRayTeXFracPV(RayTeX *numerator, RayTeX denominator);
-RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator);
-RayTeX GenRayTeXHorizontal(const char *fmt, ...); // fmt: 'p' for pointer, 'v' for value
-RayTeX GenRayTeXVertical(const char *fmt, ...);   // fmt: 'p' for pointer, 'v' for value
-RayTeX GenRayTeXMatrix(const char *fmt, ...);     // fmt: 'p' for pointer, 'v' for value, '&' for column skip, '\\' for end of row
+RayTeX GenRayTeXFrac(char fmt0, char fmt1, ...);  // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
+RayTeX GenRayTeXHorizontal(const char *fmt, ...); // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
+RayTeX GenRayTeXVertical(const char *fmt, ...);   // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value
+RayTeX GenRayTeXMatrix(const char *fmt, ...);     // fmt: ' ' for space, 't' for text, 'i' for int, 's' for symbol, 'p' for pointer, 'v' for value, \
+                                                          '&' for column skip, '\\' for end of row
 
 // Unloads the tex and all owned children.
 // Any child that was added by value is owned. Any child that was added by pointer is unowned.
