@@ -11,7 +11,9 @@ int main()
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
     SetTargetFPS(60);
 
-    RayTeX tex = GenRayTeXVertical("vvv",
+    RayTeX tex = GenRayTeXVertical("vvvvv",
+        RayTeXColor(GenRayTeXText("Oranges"), ORANGE),
+        GenRayTeXSymbol(TEXSYMBOL_NEQ),
         GenRayTeXHorizontal("vvvvv",
             GenRayTeXFrac(
                 GenRayTeXText("Pineapple"),
@@ -29,12 +31,15 @@ int main()
         GenRayTeXSymbol(TEXSYMBOL_NEQ),
         RayTeXColor(GenRayTeXText("Oranges"), ORANGE));
 
-    RayTeX* frac = RayTeXHorizontalChild(RayTeXVerticalChild(&tex, 0), 4);
+    RayTeX *row2  = RayTeXVerticalChild(&tex, 2);
+    RayTeX *frac1 = RayTeXHorizontalChild(row2, 0);
+    RayTeX *frac2 = RayTeXHorizontalChild(row2, 4);
 
     while (!WindowShouldClose())
     {
         Color color = Rainbow((float)GetTime());
-        UpdateRayTeXColor(frac, color);
+        UpdateRayTeXColor(frac1, color);
+        UpdateRayTeXColor(frac2, color);
 
         BeginDrawing();
         ClearBackground(RAYWHITE);
