@@ -6,7 +6,7 @@
 
 enum {
     TEXFRAC_OVERHANG  = 4, // Measured in mu
-    TEXFRAC_SPACING   = 3, // Measured in mu
+    TEXFRAC_SPACING   = 2, // Measured in mu
     TEXFRAC_THICKNESS = 1, // Measured in mu
 };
 
@@ -398,12 +398,11 @@ RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator)
     return element;
 }
 
-RayTeX GenRayTeXHorizontal(TeXAlign alignContent, const char *fmt, ...)
+RayTeX GenRayTeXHorizontal(const char *fmt, ...)
 {
     int count = (int)strlen(fmt);
     RayTeX element = { 0 };
     element.mode = TEXMODE_HORIZONTAL;
-    element.horizontal.alignContent = alignContent;
     element.horizontal.elementCount = count;
     element.horizontal.content = RL_MALLOC(count * sizeof(RayTeXRef));
     if (element.horizontal.content != NULL)
@@ -435,12 +434,11 @@ RayTeX GenRayTeXHorizontal(TeXAlign alignContent, const char *fmt, ...)
 // WARNING: Shallow copies of the elements are created.
 // Unloading them outside of the vertical will also unload them for the vertical,
 // and unloading the vertical will also unload them outside of the vertical.
-RayTeX GenRayTeXVertical(TeXAlign alignContent, const char *fmt, ...)
+RayTeX GenRayTeXVertical(const char *fmt, ...)
 {
     int count = (int)strlen(fmt);
     RayTeX element = { 0 };
     element.mode = TEXMODE_VERTICAL;
-    element.horizontal.alignContent = alignContent;
     element.vertical.elementCount = count;
     element.vertical.content = RL_MALLOC(count * sizeof(RayTeXRef));
     if (element.vertical.content != NULL)
@@ -663,84 +661,41 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
 
     case TEXMODE_HORIZONTAL:
     {
-        const TeXAlign alignContent = tex->horizontal.alignContent;
-        if (alignContent == HORIZONTAL_TEXALIGN_TOP)
+        Vector2 horizontalSize = rMeasureRayTeX(font, tex, fontSize);
+        for (int i = 0; i < tex->horizontal.elementCount; ++i)
         {
-            for (int i = 0; i < tex->horizontal.elementCount; ++i)
+            RayTeX *element = tex->horizontal.content[i].ptr;
+            const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+            float yOffset = (horizontalSize.y - size.y) / 2;
+            if (element->mode == TEXMODE_FRAC)
             {
-                const RayTeX *element = tex->horizontal.content[i].ptr;
-                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
-                rDrawRayTeX(font, element, position, fontSize, color);
-                position.x += size.x;
+                float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
+                const Vector2 numeratorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
+                const Vector2 denominatorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
+                yOffset = yOffset - (numeratorSize.y - denominatorSize.y + spacing) / 2;
             }
-        }
-        else
-        {
-            Vector2 horizontalSize = rMeasureRayTeX(font, tex, fontSize);
-            for (int i = 0; i < tex->horizontal.elementCount; ++i)
-            {
-                RayTeX *element = tex->horizontal.content[i].ptr;
-                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
-                float yOffset;
-                switch (alignContent)
-                {
-                case HORIZONTAL_TEXALIGN_CENTER:
-                    yOffset = (horizontalSize.y - size.y) / 2;
-                    break;
-                case HORIZONTAL_TEXALIGN_BOTTOM:
-                    yOffset = horizontalSize.y - size.y;
-                    break;
-
-                default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown align [%i]", alignContent);
-                }
-                Vector2 positionWithOffset = { 0 };
-                positionWithOffset.x = position.x;
-                positionWithOffset.y = position.y + yOffset;
-                rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
-                position.x += size.x;
-            }
+            Vector2 positionWithOffset = { 0 };
+            positionWithOffset.x = position.x;
+            positionWithOffset.y = position.y + yOffset;
+            rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
+            position.x += size.x;
         }
     }
         break;
 
     case TEXMODE_VERTICAL: // todo
     {
-        const TeXAlign alignContent = tex->vertical.alignContent;
-        if (alignContent == VERTICAL_TEXALIGN_LEFT)
+        Vector2 verticalSize = rMeasureRayTeX(font, tex, fontSize);
+        for (int i = 0; i < tex->vertical.elementCount; ++i)
         {
-            for (int i = 0; i < tex->vertical.elementCount; ++i)
-            {
-                const RayTeX *element = tex->vertical.content[i].ptr;
-                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
-                rDrawRayTeX(font, element, position, fontSize, color);
-                position.x += size.x;
-            }
-        }
-        else
-        {
-            Vector2 verticalSize = rMeasureRayTeX(font, tex, fontSize);
-            for (int i = 0; i < tex->vertical.elementCount; ++i)
-            {
-                const RayTeX *element = tex->vertical.content[i].ptr;
-                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
-                float xOffset;
-                switch (alignContent)
-                {
-                case VERTICAL_TEXALIGN_CENTER:
-                    xOffset = (verticalSize.x - size.x) / 2;
-                    break;
-                case VERTICAL_TEXALIGN_RIGHT:
-                    xOffset = verticalSize.x - size.x;
-                    break;
-
-                default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown align [%i]", alignContent);
-                }
-                Vector2 positionWithOffset = { 0 };
-                positionWithOffset.x = position.x + xOffset;
-                positionWithOffset.y = position.y;
-                rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
-                position.y += size.y;
-            }
+            const RayTeX *element = tex->vertical.content[i].ptr;
+            const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+            float xOffset = (verticalSize.x - size.x) / 2;
+            Vector2 positionWithOffset = { 0 };
+            positionWithOffset.x = position.x + xOffset;
+            positionWithOffset.y = position.y;
+            rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
+            position.y += size.y;
         }
     }
         break;

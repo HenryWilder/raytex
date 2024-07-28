@@ -104,13 +104,11 @@ typedef struct RayTeX {
         } frac;
 
         struct {
-            TeXAlign alignContent;
             int elementCount;
             RayTeXRef *content; // elementCount elements
         } horizontal;
 
         struct {
-            TeXAlign alignContent;
             int elementCount;
             RayTeXRef *content; // elementCount elements
         } vertical;
@@ -154,9 +152,9 @@ RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator);
 RayTeX GenRayTeXFracVP(RayTeX numerator, RayTeX *denominator);
 RayTeX GenRayTeXFracPV(RayTeX *numerator, RayTeX denominator);
 RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator);
-RayTeX GenRayTeXHorizontal(TeXAlign alignContent, const char *fmt, ...); // fmt: 'p' for pointer, 'v' for value
-RayTeX GenRayTeXVertical(TeXAlign alignContent, const char *fmt, ...);   // fmt: 'p' for pointer, 'v' for value
-RayTeX GenRayTeXMatrix(const char *fmt, ...);                            // fmt: 'p' for pointer, 'v' for value, '&' for column skip, '\\' for end of row
+RayTeX GenRayTeXHorizontal(const char *fmt, ...); // fmt: 'p' for pointer, 'v' for value
+RayTeX GenRayTeXVertical(const char *fmt, ...);   // fmt: 'p' for pointer, 'v' for value
+RayTeX GenRayTeXMatrix(const char *fmt, ...);     // fmt: 'p' for pointer, 'v' for value, '&' for column skip, '\\' for end of row
 
 // Unloads the tex and all owned children.
 // Any child that was added by value is owned. Any child that was added by pointer is unowned.

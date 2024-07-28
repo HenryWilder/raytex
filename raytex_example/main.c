@@ -11,15 +11,25 @@ int main()
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
     SetTargetFPS(60);
 
-    RayTeX tex = GenRayTeXVertical(VERTICAL_TEXALIGN_CENTER, "vvv",
-        GenRayTeXHorizontal(HORIZONTAL_TEXALIGN_CENTER, "vvv",
+    RayTeX tex = GenRayTeXVertical("vvv",
+        GenRayTeXHorizontal("vvvvv",
+            GenRayTeXFrac(
+                GenRayTeXText("Pineapple"),
+                GenRayTeXText("Strawberry")),
+            GenRayTeXSymbol(TEXSYMBOL_NEQ),
             RayTeXColor(GenRayTeXText("Apples"), RED),
             GenRayTeXSymbol(TEXSYMBOL_NEQ),
-            GenRayTeXFrac(GenRayTeXText("Apples"), GenRayTeXText("Oranges"))),
+            GenRayTeXFrac(
+                GenRayTeXHorizontal("vv",
+                    GenRayTeXText("Apples + "),
+                    GenRayTeXFrac(
+                        GenRayTeXText("banana"),
+                        GenRayTeXText("mango"))),
+                GenRayTeXText("Oranges"))),
         GenRayTeXSymbol(TEXSYMBOL_NEQ),
         RayTeXColor(GenRayTeXText("Oranges"), ORANGE));
 
-    RayTeX* frac = RayTeXHorizontalChild(RayTeXVerticalChild(&tex, 0), 2);
+    RayTeX* frac = RayTeXHorizontalChild(RayTeXVerticalChild(&tex, 0), 4);
 
     while (!WindowShouldClose())
     {
