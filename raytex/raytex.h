@@ -12,8 +12,10 @@ typedef enum {
 #define TEX_HRULE     "\\hrule"
 
 RayTexSymbol RayTeXSymbolFromName(const char *name);
+Vector2 MeasureRayTeXSymbolEx(Font font, RayTexSymbol symbol, float fontSize);
 int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize);
 int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize);
+void DrawRayTeXSymbolEx(Font font, RayTexSymbol symbol, Vector2 position, float fontSize, Color color);
 void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color);
 
 typedef enum {
@@ -69,6 +71,13 @@ enum {
     TEX_FRAC_DENOMINATOR = 1,
 };
 
+struct RayTeX;
+
+typedef struct RayTeXRef {
+    bool isOwned;
+    struct RayTeX *ptr;
+} RayTeXRef;
+
 typedef struct RayTeX {
     Color overrideColor;
     int overrideFontSize;
@@ -79,7 +88,7 @@ typedef struct RayTeX {
     int mode : (sizeof(int) * 8 - 3); // TeXMode
     union {
         struct {
-            int size;               // Measured in mu (18 mu = current font size)
+            int size; // Measured in mu (18 mu = current font size)
         } space;
 
         struct {
@@ -91,56 +100,74 @@ typedef struct RayTeX {
         } text;
 
         struct {
-            int spacing;            // Space between bottom of numerator and top of denominator
-            struct RayTeX *content; // Exactly 2 elements
+            RayTeXRef content[2];
         } frac;
 
         struct {
             TeXAlign alignContent;
             int elementCount;
-            struct RayTeX *content; // elementCount elements
+            RayTeXRef *content; // elementCount elements
         } horizontal;
 
         struct {
             TeXAlign alignContent;
             int elementCount;
-            struct RayTeX *content; // elementCount elements
+            RayTeXRef *content; // elementCount elements
         } vertical;
 
         struct {
             int rowCount;
             int columnCount;
-            struct RayTeX *content; // rowCount * columnCount elements
+            RayTeXRef *content; // rowCount*columnCount elements
         } matrix;
     };
 } RayTeX;
 
-int MeasureRayTeXWidthEx(Font font, RayTeX tex, int fontSize);
-int MeasureRayTeXHeightEx(Font font, RayTeX tex, int fontSize);
-
+Vector2 MeasureRayTeXEx(Font font, RayTeX tex, int fontSize);
 int MeasureRayTeXWidth(RayTeX tex, int fontSize);
 int MeasureRayTeXHeight(RayTeX tex, int fontSize);
 
-RayTeX SetRayTeXColor(RayTeX tex, Color color);     // Sets the TeX color
-RayTeX SetRayTeXFontSize(RayTeX tex, int fontSize); // Sets the TeX font size
-RayTeX SetRayTeXFont(RayTeX tex, Font font);        // Sets the TeX font
+void UpdateRayTeXColor(RayTeX *tex, Color color);
+void UpdateRayTeXFontSize(RayTeX *tex, int fontSize);
+void UpdateRayTeXFont(RayTeX *tex, Font font);
+void ClearRayTeXColor(RayTeX *tex);              // Clears the element's override so that it inherits from its parent again
+void ClearRayTeXFontSize(RayTeX *tex);           // Clears the element's override so that it inherits from its parent again
+void ClearRayTeXFont(RayTeX *tex);               // Clears the element's override so that it inherits from its parent again
+
+RayTeX RayTeXColor(RayTeX tex, Color color);     // Sets the TeX color of the element and returns the modified element - useful for initialization
+RayTeX RayTeXFontSize(RayTeX tex, int fontSize); // Sets the TeX font size of the element and returns the modified element - useful for initialization
+RayTeX RayTeXFont(RayTeX tex, Font font);        // Sets the TeX font of the element and returns the modified element - useful for initialization
+
+// Remember that you can also use the `&` operator if you want to update the element itself and not one of its children
+
+RayTeX *RayTeXFracNumerator(RayTeX *fracTex);                     // Returns a pointer to the element for updating after initialization
+RayTeX *RayTeXFracDenominator(RayTeX *fracTex);                   // Returns a pointer to the element for updating after initialization
+RayTeX *RayTeXHorizontalChild(RayTeX *horizontalTex, int index);  // Returns a pointer to the element for updating after initialization
+RayTeX *RayTeXVerticalChild(RayTeX *verticalTex, int index);      // Returns a pointer to the element for updating after initialization
+RayTeX *RayTeXMatrixCell(RayTeX *matrixTex, int row, int column); // Returns a pointer to the element for updating after initialization
 
 RayTeX GenRayTeXSpace(int mu);
 RayTeX GenRayTeXVSpace(int mu);
 RayTeX GenRayTeXText(const char *content);
 RayTeX GenRayTeXSymbol(RayTexSymbol symbol);
-RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator, int spacing);
-RayTeX GenRayTeXHorizontal(TeXAlign alignContent, int count, ...);
-RayTeX GenRayTeXVertical(TeXAlign alignContent, int count, ...);
-RayTeX GenRayTeXMatrix(int rowCount, int columnCount, ...);
-void UnloadRayTeX(RayTeX tex); // All children will also be unloaded
+RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator);
+RayTeX GenRayTeXFracVP(RayTeX numerator, RayTeX *denominator);
+RayTeX GenRayTeXFracPV(RayTeX *numerator, RayTeX denominator);
+RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator);
+RayTeX GenRayTeXHorizontal(TeXAlign alignContent, const char *fmt, ...); // fmt: 'p' for pointer, 'v' for value
+RayTeX GenRayTeXVertical(TeXAlign alignContent, const char *fmt, ...);   // fmt: 'p' for pointer, 'v' for value
+RayTeX GenRayTeXMatrix(const char *fmt, ...);                            // fmt: 'p' for pointer, 'v' for value, '&' for column skip, '\\' for end of row
 
-void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color);
-void DrawRayTeXCenteredEx(Font font, RayTeX tex, int x, int y, int width, int height, int fontSize, Color color);
-void DrawRayTeXCenteredRecEx(Font font, RayTeX tex, Rectangle rec, int fontSize, Color color);
+// Unloads the tex and all owned children.
+// Any child that was added by value is owned. Any child that was added by pointer is unowned.
+// Unowned children will not be unloaded. They may be shared, and need to be unloaded separately.
+void UnloadRayTeX(RayTeX tex);
 
 void DrawRayTeX(RayTeX tex, int x, int y, int fontSize, Color color);
+void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color);
+
 void DrawRayTeXCentered(RayTeX tex, int x, int y, int width, int height, int fontSize, Color color);
 void DrawRayTeXCenteredRec(RayTeX tex, Rectangle rec, int fontSize, Color color);
+void DrawRayTeXCenteredPro(Font font, RayTeX tex, Rectangle rec, float fontSize, Color color);
 
 #endif

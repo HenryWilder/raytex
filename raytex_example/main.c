@@ -9,21 +9,23 @@ int main()
     int windowWidth  = 640;
     int windowHeight = 480;
     InitWindow(windowWidth, windowHeight, "RayTeX Example");
-    SetTargetFPS(240);
+    SetTargetFPS(60);
 
-    RayTeX tex = GenRayTeXVertical(VERTICAL_TEXALIGN_CENTER, 3,
-        GenRayTeXHorizontal(HORIZONTAL_TEXALIGN_CENTER, 3,
-            GenRayTeXText("Apples"),
+    RayTeX tex = GenRayTeXVertical(VERTICAL_TEXALIGN_CENTER, "vvv",
+        GenRayTeXHorizontal(HORIZONTAL_TEXALIGN_CENTER, "vvv",
+            RayTeXColor(GenRayTeXText("Apples"), RED),
             GenRayTeXSymbol(TEXSYMBOL_NEQ),
-            GenRayTeXFrac(
-                GenRayTeXText("Apples"),
-                GenRayTeXText("Oranges"),
-                4)),
+            GenRayTeXFrac(GenRayTeXText("Apples"), GenRayTeXText("Oranges"))),
         GenRayTeXSymbol(TEXSYMBOL_NEQ),
-        GenRayTeXText("Oranges"));
+        RayTeXColor(GenRayTeXText("Oranges"), ORANGE));
+
+    RayTeX* frac = RayTeXHorizontalChild(RayTeXVerticalChild(&tex, 0), 2);
 
     while (!WindowShouldClose())
     {
+        Color color = Rainbow((float)GetTime());
+        UpdateRayTeXColor(frac, color);
+
         BeginDrawing();
         ClearBackground(RAYWHITE);
 
@@ -39,5 +41,5 @@ int main()
 
 Color Rainbow(float t)
 {
-    return ColorFromHSV(t * 180.0f, 1.0f, 1.0f);
+    return ColorFromHSV(t * 120.0f, 1.0f, 1.0f);
 }

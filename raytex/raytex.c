@@ -1,55 +1,68 @@
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include "raytex.h"
 
 #define TRACELOG(level, ...) TraceLog(level, __VA_ARGS__)
 
 enum {
-    TEXFRAC_THICKNESS = 1,
+    TEXFRAC_OVERHANG  = 4, // Measured in mu
+    TEXFRAC_SPACING   = 3, // Measured in mu
+    TEXFRAC_THICKNESS = 1, // Measured in mu
 };
 
 RayTexSymbol RayTeXSymbolFromName(const char *name)
 {
     // todo: Implement this as a lookup table once there are a lot of symbols
-    if (strcmp(name, "neq") == 0) return TEXSYMBOL_NEQ;
+    if (TextIsEqual(name, "neq")) return TEXSYMBOL_NEQ;
 
     TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol \"%s\"", name);
 }
 
-int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
+Vector2 MeasureRayTeXSymbolEx(Font font, RayTexSymbol symbol, float fontSize)
 {
+    Vector2 size = { 0 };
     switch (symbol)
     {
     case TEXSYMBOL_NEQ:
-        return MU_TO_PIXELS(RELSPACE_SIZE*2, fontSize) + MeasureText("=", fontSize);
+    {
+        Vector2 baseSize = MeasureTextEx(font, "=", fontSize, fontSize / 10);
+        size.x = baseSize.x + MU_TO_PIXELS(RELSPACE_SIZE*2.0f, fontSize);
+        size.y = baseSize.y;
+    }
+        break;
 
     default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol [%i]", symbol);
     }
+    return size;
+}
+
+int MeasureRayTeXSymbolWidth(RayTexSymbol symbol, int fontSize)
+{
+    return (int)MeasureRayTeXSymbolEx(GetFontDefault(), symbol, (float)fontSize).x;
 }
 
 int MeasureRayTeXSymbolHeight(RayTexSymbol symbol, int fontSize)
 {
-    switch (symbol)
-    {
-    case TEXSYMBOL_NEQ:
-        return fontSize;
-
-    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown symbol [%i]", symbol);
-    }
+    return (int)MeasureRayTeXSymbolEx(GetFontDefault(), symbol, (float)fontSize).y;
 }
 
-void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color)
+void DrawRayTeXSymbolEx(Font font, RayTexSymbol symbol, Vector2 position, float fontSize, Color color)
 {
-    int width = MeasureRayTeXSymbolWidth(symbol, fontSize);
-    int height = MeasureRayTeXSymbolHeight(symbol, fontSize);
+    // Todo: Implement these with textures or a custom font at some point
+    Vector2 size = MeasureRayTeXSymbolEx(font, symbol, fontSize);
     switch (symbol)
     {
     case TEXSYMBOL_NEQ:
     {
-        int space = MU_TO_PIXELS(RELSPACE_SIZE, fontSize);
-        DrawText("=", x + space, y, fontSize, color);
-        Vector2 crossBottomLeft = { (float)(x + space), (float)(y + height) };
-        Vector2 crossTopRight = { (float)(x + width - space), (float)y };
+        float space = MU_TO_PIXELS((float)RELSPACE_SIZE, (float)fontSize);
+
+        Vector2 positionWithSpace = { 0 };
+        positionWithSpace.x = position.x + space;
+        positionWithSpace.y = position.y;
+        DrawTextEx(font, "=", positionWithSpace, fontSize, fontSize / 10, color);
+
+        Vector2 crossBottomLeft = { position.x + space, position.y + size.y };
+        Vector2 crossTopRight = { position.x + size.x - space, position.y };
         DrawLineV(crossBottomLeft, crossTopRight, color);
     }
         break;
@@ -58,150 +71,236 @@ void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color col
     }
 }
 
-int MeasureRayTeXWidthEx(Font font, RayTeX tex, int fontSize)
+void DrawRayTeXSymbol(RayTexSymbol symbol, int x, int y, int fontSize, Color color)
 {
-    if (tex.isOverridingFontSize) fontSize = tex.overrideFontSize;
-    if (tex.overrideFont != NULL) font = *tex.overrideFont;
-    switch (tex.mode)
+    Vector2 position = { 0 };
+    position.x = (float)x;
+    position.y = (float)y;
+    DrawRayTeXSymbolEx(GetFontDefault(), symbol, position, (float)fontSize, color);
+}
+
+static Vector2 rMeasureRayTeX(const Font *font, const RayTeX *tex, float fontSize)
+{
+    Vector2 size = { 0 };
+    if (tex->isOverridingFontSize) fontSize = (float)tex->overrideFontSize;
+    if (tex->overrideFont != NULL) font = tex->overrideFont;
+    switch (tex->mode)
     {
     case TEXMODE_SPACE:
-        return MU_TO_PIXELS(tex.space.size, fontSize);
+        size.x = MU_TO_PIXELS((float)tex->space.size, fontSize);
+        size.y = 0.0f;
+        break;
 
     case TEXMODE_VSPACE:
-        return 0;
+        size.x = 0.0f;
+        size.y = MU_TO_PIXELS((float)tex->space.size, fontSize);
+        break;
 
     case TEXMODE_TEXT:
-        return MeasureText(tex.text.content, fontSize);
+        size = MeasureTextEx(*font, tex->text.content, fontSize, fontSize / 10);
+        break;
 
     case TEXMODE_SYMBOL:
-        return MeasureRayTeXSymbolWidth(tex.symbol.content, fontSize);
+        size = MeasureRayTeXSymbolEx(*font, tex->symbol.content, fontSize);
+        break;
 
     case TEXMODE_FRAC:
     {
-        int numeratorWidth = MeasureRayTeXWidth(tex.frac.content[TEX_FRAC_NUMERATOR], fontSize);
-        int denominatorWidth = MeasureRayTeXWidth(tex.frac.content[TEX_FRAC_DENOMINATOR], fontSize);
-        return (numeratorWidth > denominatorWidth ? numeratorWidth : denominatorWidth) + tex.frac.spacing * 2;
+        Vector2 numeratorSize = rMeasureRayTeX(font, tex->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
+        Vector2 denominatorSize = rMeasureRayTeX(font, tex->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
+        size.x = (numeratorSize.x > denominatorSize.x ? numeratorSize.x : denominatorSize.x) + MU_TO_PIXELS(TEXFRAC_OVERHANG*2.0f, fontSize);
+        size.y = numeratorSize.y + denominatorSize.y + MU_TO_PIXELS(TEXFRAC_SPACING*2.0f+TEXFRAC_THICKNESS, fontSize);
     }
+        break;
 
     case TEXMODE_HORIZONTAL:
     {
-        int totalWidth = 0;
-        for (int i = 0; i < tex.horizontal.elementCount; ++i)
+        float totalWidth = 0.0f;
+        float maxHeight = 0.0f;
+        for (int i = 0; i < tex->horizontal.elementCount; ++i)
         {
-            totalWidth += MeasureRayTeXWidth(tex.horizontal.content[i], fontSize);
+            Vector2 elementSize = rMeasureRayTeX(font, tex->horizontal.content[i].ptr, fontSize);
+            totalWidth += elementSize.x;
+            if (elementSize.y > maxHeight) maxHeight = elementSize.y;
         }
-        return totalWidth;
+        size.x = totalWidth;
+        size.y = maxHeight;
     }
+        break;
 
     case TEXMODE_VERTICAL:
     {
-        int maxWidth = 0;
-        for (int i = 0; i < tex.horizontal.elementCount; ++i)
+        float maxWidth = 0.0f;
+        float totalHeight = 0.0f;
+        for (int i = 0; i < tex->horizontal.elementCount; ++i)
         {
-            int width = MeasureRayTeXWidth(tex.horizontal.content[i], fontSize);
-            if (width > maxWidth) maxWidth = width;
+            Vector2 elementSize = rMeasureRayTeX(font, tex->horizontal.content[i].ptr, fontSize);
+            if (elementSize.x > maxWidth) maxWidth = elementSize.x;
+            totalHeight += elementSize.y;
         }
-        return maxWidth;
+        size.x = maxWidth;
+        size.y = totalHeight;
     }
+        break;
 
     case TEXMODE_MATRIX:
     {
-        // todo: matrix width
-        TRACELOG(LOG_WARNING, "RAYTEX: Matrix width not implemented");
-        return;
+        // todo: measure matrix
+        TRACELOG(LOG_WARNING, "RAYTEX: Matrix measuring not implemented");
     }
+        break;
 
-    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex->mode);
     }
+    return size;
 }
 
-int MeasureRayTeXHeightEx(Font font, RayTeX tex, int fontSize)
+Vector2 MeasureRayTeXEx(Font font, RayTeX tex, int fontSize)
 {
-    if (tex.isOverridingFontSize) fontSize = tex.overrideFontSize;
-    if (tex.overrideFont != NULL) font = *tex.overrideFont;
-    switch (tex.mode)
-    {
-    case TEXMODE_SPACE:
-        return 0;
-
-    case TEXMODE_VSPACE:
-        return MU_TO_PIXELS(tex.space.size, fontSize);
-
-    case TEXMODE_TEXT:
-        return fontSize;
-
-    case TEXMODE_SYMBOL:
-        return MeasureRayTeXSymbolHeight(tex.symbol.content, fontSize);
-
-    case TEXMODE_FRAC:
-    {
-        int numeratorHeight = MeasureRayTeXHeightEx(font, tex.frac.content[TEX_FRAC_NUMERATOR], fontSize);
-        int denominatorHeight = MeasureRayTeXHeightEx(font, tex.frac.content[TEX_FRAC_DENOMINATOR], fontSize);
-        return numeratorHeight + denominatorHeight + tex.frac.spacing * 2 + TEXFRAC_THICKNESS;
-    }
-
-    case TEXMODE_HORIZONTAL:
-    {
-        int maxHeight = 0;
-        for (int i = 0; i < tex.horizontal.elementCount; ++i)
-        {
-            int height = MeasureRayTeXHeightEx(font, tex.horizontal.content[i], fontSize);
-            if (height > maxHeight) maxHeight = height;
-        }
-        return maxHeight;
-    }
-
-    case TEXMODE_VERTICAL:
-    {
-        int totalHeight = 0;
-        for (int i = 0; i < tex.horizontal.elementCount; ++i)
-        {
-            totalHeight += MeasureRayTeXHeightEx(font, tex.horizontal.content[i], fontSize);
-        }
-        return totalHeight;
-    }
-
-    case TEXMODE_MATRIX:
-    {
-        // todo: matrix height
-        TRACELOG(LOG_WARNING, "RAYTEX: Matrix height not implemented");
-        return;
-    }
-
-    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
-    }
+    return rMeasureRayTeX(&font, &tex, (float)fontSize);
 }
-
 int MeasureRayTeXWidth(RayTeX tex, int fontSize)
 {
-    return MeasureRayTeXWidthEx(GetFontDefault(), tex, fontSize);
+    return (int)MeasureRayTeXEx(GetFontDefault(), tex, fontSize).x;
 }
-
 int MeasureRayTeXHeight(RayTeX tex, int fontSize)
 {
-    return MeasureRayTeXHeightEx(GetFontDefault(), tex, fontSize);
+    return (int)MeasureRayTeXEx(GetFontDefault(), tex, fontSize).y;
 }
 
-RayTeX SetRayTeXColor(RayTeX tex, Color color)
+void UpdateRayTeXColor(RayTeX *tex, Color color)
 {
-    tex.isOverridingColor = true;
-    tex.overrideColor = color;
+    tex->overrideColor = color;
+    tex->isOverridingColor = true;
+}
+
+void UpdateRayTeXFontSize(RayTeX *tex, int fontSize)
+{
+    tex->overrideFontSize = fontSize;
+    tex->isOverridingFontSize = true;
+}
+
+void UpdateRayTeXFont(RayTeX *tex, Font font)
+{
+    if (tex->overrideFont == NULL) tex->overrideFont = RL_MALLOC(sizeof(Font));
+
+    if (tex->overrideFont != NULL) *tex->overrideFont = font;
+    else TRACELOG(LOG_ERROR, "RAYTEX: UpdateRayTeXFont() failed to allocate");
+}
+
+void ClearRayTeXColor(RayTeX *tex)
+{
+    tex->isOverridingColor = false;
+}
+
+void ClearRayTeXFontSize(RayTeX *tex)
+{
+    tex->isOverridingFontSize = false;
+}
+
+void ClearRayTeXFont(RayTeX *tex)
+{
+    RL_FREE(tex->overrideFont);
+    tex->overrideFont = NULL;
+}
+
+RayTeX RayTeXColor(RayTeX tex, Color color)
+{
+    UpdateRayTeXColor(&tex, color);
     return tex;
 }
 
-RayTeX SetRayTeXFontSize(RayTeX tex, int fontSize)
+RayTeX RayTeXFontSize(RayTeX tex, int fontSize)
 {
-    tex.isOverridingFontSize = true;
-    tex.overrideFontSize = fontSize;
+    UpdateRayTeXFontSize(&tex, fontSize);
     return tex;
 }
 
-RayTeX SetRayTeXFont(RayTeX tex, Font font)
+RayTeX RayTeXFont(RayTeX tex, Font font)
 {
-    tex.overrideFont = RL_MALLOC(sizeof(Font));
-    if (tex.overrideFont) *tex.overrideFont = font;
-    else TRACELOG(LOG_ERROR, "RAYTEX: SetRayTeXFont() failed to allocate");
+    UpdateRayTeXFont(&tex, font);
     return tex;
+}
+
+RayTeX *RayTeXFracNumerator(RayTeX *fracTex)
+{
+    if (fracTex->mode != TEXMODE_FRAC) TRACELOG(LOG_WARNING, "RAYTEX: RayTeXFracNumerator() only valid for TEXMODE_FRAC");
+    return fracTex->frac.content[TEX_FRAC_NUMERATOR].ptr;
+}
+
+RayTeX *RayTeXFracDenominator(RayTeX *fracTex)
+{
+    if (fracTex->mode != TEXMODE_FRAC) TRACELOG(LOG_WARNING, "RAYTEX: RayTeXFracDenominator() only valid for TEXMODE_FRAC");
+    return fracTex->frac.content[TEX_FRAC_DENOMINATOR].ptr;
+}
+
+RayTeX *RayTeXHorizontalChild(RayTeX *horizontalTex, int index)
+{
+    if (horizontalTex->mode != TEXMODE_HORIZONTAL) TRACELOG(LOG_WARNING, "RAYTEX: RayTeXHorizontalChild() only valid for TEXMODE_HORIZONTAL");
+    if (index < 0)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXHorizontalChild() index (%i) cannot be negative", index);
+        //index = 0;
+    }
+    int lastChildIndex = horizontalTex->horizontal.elementCount - 1;
+    if (index > lastChildIndex)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXHorizontalChild() index (%i) cannot be higher than the index of horizontalTex's last child (%i)",
+                 index, lastChildIndex);
+        //index = lastChildIndex;
+    }
+    return horizontalTex->horizontal.content[index].ptr;
+}
+
+RayTeX *RayTeXVerticalChild(RayTeX *verticalTex, int index)
+{
+    if (verticalTex->mode != TEXMODE_VERTICAL) TRACELOG(LOG_WARNING, "RAYTEX: RayTeXVerticalChild() only valid for TEXMODE_VERTICAL");
+    if (index < 0)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXVerticalChild() index (%i) cannot be negative", index);
+        //index = 0;
+    }
+    int lastChildIndex = verticalTex->horizontal.elementCount - 1;
+    if (index > lastChildIndex)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXVerticalChild() index (%i) cannot be higher than the index of verticalTex's last child (%i)",
+                 index, lastChildIndex);
+        //index = lastChildIndex;
+    }
+    return verticalTex->vertical.content[index].ptr;
+}
+
+RayTeX *RayTeXMatrixCell(RayTeX *matrixTex, int rowIndex, int columnIndex)
+{
+    if (matrixTex->mode != TEXMODE_MATRIX) TRACELOG(LOG_WARNING, "RAYTEX: RayTeXMatrixCell() only valid for TEXMODE_MATRIX");
+
+    if (rowIndex < 0)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXMatrixCell() rowIndex (%i) cannot be negative", rowIndex);
+        //rowIndex = 0;
+    }
+    int lastRowIndex = matrixTex->matrix.rowCount - 1;
+    if (rowIndex > lastRowIndex)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXMatrixCell() rowIndex (%i) cannot be higher than the index of matrixTex's last row (%i)",
+                 rowIndex, lastRowIndex);
+        //rowIndex = lastRowIndex;
+    }
+
+    if (columnIndex < 0)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXMatrixCell() columnIndex (%i) cannot be negative", columnIndex);
+        //columnIndex = 0;
+    }
+    int lastColumnIndex = matrixTex->matrix.columnCount - 1;
+    if (columnIndex > lastColumnIndex)
+    {
+        TRACELOG(LOG_WARNING, "RAYTEX: RayTeXMatrixCell() columnIndex (%i) cannot be higher than the index of matrixTex's last column (%i)",
+                 columnIndex, lastColumnIndex);
+        //columnIndex = lastColumnIndex;
+    }
+
+    return matrixTex->matrix.content[rowIndex * matrixTex->matrix.columnCount + columnIndex].ptr;
 }
 
 RayTeX GenRayTeXSpace(int mu)
@@ -240,43 +339,91 @@ RayTeX GenRayTeXSymbol(RayTexSymbol symbol)
     return element;
 }
 
-// WARNING: Shallow copies of the numerator and denominator are created.
-// Unloading them outside of the fraction will also unload them for the fraction,
-// and unloading the fraction will also unload them outside of the fraction.
-RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator, int spacing)
+static RayTeXRef RayTeXRefFromValue(RayTeX value)
+{
+    RayTeX *pointer = RL_MALLOC(sizeof(RayTeX));
+    if (pointer != NULL)
+    {
+        *pointer = value;
+        RayTeXRef ref = { 0 };
+        ref.isOwned = true;
+        ref.ptr = pointer;
+        return ref;
+    }
+    else TRACELOG(LOG_ERROR, "RayTeXRefFromValue() failed to allocate");
+}
+
+static RayTeXRef RayTeXRefFromPointer(RayTeX *pointer)
+{
+    RayTeXRef ref = { 0 };
+    ref.isOwned = false;
+    ref.ptr = pointer;
+    return ref;
+}
+
+RayTeX GenRayTeXFrac(RayTeX numerator, RayTeX denominator)
 {
     RayTeX element = { 0 };
     element.mode = TEXMODE_FRAC;
-    element.frac.spacing = spacing;
-    element.frac.content = RL_MALLOC(sizeof(RayTeX) * 2);
-    if (element.frac.content != NULL)
-    {
-        element.frac.content[TEX_FRAC_NUMERATOR] = numerator;
-        element.frac.content[TEX_FRAC_DENOMINATOR] = denominator;
-        TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
-    }
-    else TRACELOG(LOG_ERROR, "RAYTEX: GenRayTeXFraction() failed to allocate");
+    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromValue(numerator);
+    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromValue(denominator);
+    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
+    return element;
+}
+RayTeX GenRayTeXFracVP(RayTeX numerator, RayTeX *denominator)
+{
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_FRAC;
+    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromValue(numerator);
+    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromPointer(denominator);
+    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
+    return element;
+}
+RayTeX GenRayTeXFracPV(RayTeX *numerator, RayTeX denominator)
+{
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_FRAC;
+    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromPointer(numerator);
+    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromValue(denominator);
+    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
+    return element;
+}
+RayTeX GenRayTeXFracPP(RayTeX *numerator, RayTeX *denominator)
+{
+    RayTeX element = { 0 };
+    element.mode = TEXMODE_FRAC;
+    element.frac.content[TEX_FRAC_NUMERATOR] = RayTeXRefFromPointer(numerator);
+    element.frac.content[TEX_FRAC_DENOMINATOR] = RayTeXRefFromPointer(denominator);
+    TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element generated successfully");
     return element;
 }
 
-// WARNING: Shallow copies of the elements are created.
-// Unloading them outside of the horizontal will also unload them for the horizontal,
-// and unloading the horizontal will also unload them outside of the horizontal.
-RayTeX GenRayTeXHorizontal(TeXAlign alignContent, int count, ...)
+RayTeX GenRayTeXHorizontal(TeXAlign alignContent, const char *fmt, ...)
 {
+    int count = (int)strlen(fmt);
     RayTeX element = { 0 };
     element.mode = TEXMODE_HORIZONTAL;
     element.horizontal.alignContent = alignContent;
     element.horizontal.elementCount = count;
-    element.horizontal.content = RL_MALLOC(count * sizeof(RayTeX));
+    element.horizontal.content = RL_MALLOC(count * sizeof(RayTeXRef));
     if (element.horizontal.content != NULL)
     {
         int argC = 0;
         va_list args;
-        va_start(args, count);
+        va_start(args, fmt);
         for (int i = 0; i < count; ++i)
         {
-            element.horizontal.content[i] = va_arg(args, RayTeX);
+            switch (fmt[i])
+            {
+            case 'v':
+                element.horizontal.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));
+                break;
+            case 'p':
+                element.horizontal.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
+                break;
+
+            default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXHorizontal() at index %i of fmt \"%s\": meaning of '%c' is unknown", i, fmt, fmt[i]);
+            }
         }
         va_end(args);
         TRACELOG(LOG_INFO, "RAYTEX: TeX horizontal with %i elements generated successfully", count);
@@ -288,20 +435,31 @@ RayTeX GenRayTeXHorizontal(TeXAlign alignContent, int count, ...)
 // WARNING: Shallow copies of the elements are created.
 // Unloading them outside of the vertical will also unload them for the vertical,
 // and unloading the vertical will also unload them outside of the vertical.
-RayTeX GenRayTeXVertical(TeXAlign alignContent, int count, ...)
+RayTeX GenRayTeXVertical(TeXAlign alignContent, const char *fmt, ...)
 {
+    int count = (int)strlen(fmt);
     RayTeX element = { 0 };
     element.mode = TEXMODE_VERTICAL;
     element.horizontal.alignContent = alignContent;
     element.vertical.elementCount = count;
-    element.vertical.content = RL_MALLOC(count * sizeof(RayTeX));
+    element.vertical.content = RL_MALLOC(count * sizeof(RayTeXRef));
     if (element.vertical.content != NULL)
     {
         va_list args;
-        va_start(args, count);
+        va_start(args, fmt);
         for (int i = 0; i < count; ++i)
         {
-            element.vertical.content[i] = va_arg(args, RayTeX);
+            switch (fmt[i])
+            {
+            case 'v':
+                element.vertical.content[i] = RayTeXRefFromValue(va_arg(args, RayTeX));
+                break;
+            case 'p':
+                element.vertical.content[i] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
+                break;
+
+            default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXVertical() at index %i of fmt \"%s\": meaning of '%c' is unknown", i, fmt, fmt[i]);
+            }
         }
         va_end(args);
         TRACELOG(LOG_INFO, "RAYTEX: TeX vertical with %i elements generated successfully", count);
@@ -313,27 +471,85 @@ RayTeX GenRayTeXVertical(TeXAlign alignContent, int count, ...)
 // WARNING: Shallow copies of the elements are created.
 // Unloading them outside of the matrix will also unload them for the matrix,
 // and unloading the matrix will also unload them outside of the matrix.
-RayTeX GenRayTeXMatrix(int rowCount, int columnCount, ...)
+RayTeX GenRayTeXMatrix(const char *fmt, ...)
 {
+    int rowCount = 0;
+    int columnCount = 0;
+    {
+        int currentRowColumnCount = 0;
+        for (const char *c = fmt; *c; ++c)
+        {
+            if (*c != '\\')
+            {
+                ++rowCount;
+                if (currentRowColumnCount > columnCount) columnCount = currentRowColumnCount;
+                currentRowColumnCount = 0;
+            }
+            else ++currentRowColumnCount;
+        }
+    }
+
     RayTeX element = { 0 };
     element.mode = TEXMODE_MATRIX;
     element.matrix.rowCount = rowCount;
     element.matrix.columnCount = columnCount;
     int elementCount = rowCount * columnCount;
-    element.matrix.content = RL_MALLOC(elementCount * sizeof(RayTeX));
+    element.matrix.content = RL_MALLOC(elementCount * sizeof(RayTeXRef));
     if (element.matrix.content != NULL)
     {
         va_list args;
-        va_start(args, columnCount);
-        for (int i = 0; i < elementCount; ++i)
+        va_start(args, fmt);
+        int index = 0;
+        const char *c = fmt;
+        int row = 0;
+        int column = 0;
+        for (const char *c = fmt; *c; ++c)
         {
-            element.matrix.content[i] = va_arg(args, RayTeX);
+            switch (*c)
+            {
+            case 'v':
+                element.matrix.content[index] = RayTeXRefFromValue(va_arg(args, RayTeX));
+                ++column;
+                break;
+            case 'p':
+                element.matrix.content[index] = RayTeXRefFromPointer(va_arg(args, RayTeX*));
+                ++column;
+                break;
+            case '&':
+                element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX);
+                ++column;
+                break;
+            case '\\':
+                for (; column < columnCount; ++column, ++index)
+                {
+                    element.matrix.content[index] = RayTeXRefFromValue(BLANK_TEX);
+                }
+                break;
+
+            default: TRACELOG(LOG_WARNING, "RAYTEX: GenRayTeXMatrix() at index %i of fmt \"%s\": meaning of '%c' is unknown", index, fmt, *c);
+            }
+
+            if (column == columnCount)
+            {
+                column = 0;
+                ++row;
+            }
         }
         va_end(args);
         TRACELOG(LOG_INFO, "RAYTEX: TeX matrix with %i elements (%i rows x %i columns) generated successfully", elementCount, rowCount, columnCount);
     }
     else TRACELOG(LOG_ERROR, "RAYTEX: GenRayTeXMatrix() failed to allocate");
     return element;
+}
+
+static void UnloadAndFreeRayTeXRefIfOwned(RayTeXRef ref)
+{
+    if (ref.isOwned)
+    {
+        UnloadRayTeX(*ref.ptr);
+        RL_FREE(ref.ptr);
+    }
+    else TRACELOG(LOG_INFO, "RAYTEX: potentially-shared child visited during unloading process has not been unloaded");
 }
 
 void UnloadRayTeX(RayTeX tex)
@@ -358,16 +574,15 @@ void UnloadRayTeX(RayTeX tex)
         break;
 
     case TEXMODE_FRAC:
-        UnloadRayTeX(tex.frac.content[TEX_FRAC_NUMERATOR]);
-        UnloadRayTeX(tex.frac.content[TEX_FRAC_DENOMINATOR]);
-        RL_FREE(tex.frac.content);
+        UnloadAndFreeRayTeXRefIfOwned(tex.frac.content[TEX_FRAC_NUMERATOR]);
+        UnloadAndFreeRayTeXRefIfOwned(tex.frac.content[TEX_FRAC_DENOMINATOR]);
         TRACELOG(LOG_INFO, "RAYTEX: TeX fraction element unloaded successfully");
         break;
 
     case TEXMODE_HORIZONTAL:
         for (int i = 0; i < tex.horizontal.elementCount; ++i)
         {
-            UnloadRayTeX(tex.horizontal.content[i]);
+            UnloadAndFreeRayTeXRefIfOwned(tex.horizontal.content[i]);
         }
         RL_FREE(tex.horizontal.content);
         TRACELOG(LOG_INFO, "RAYTEX: TeX horizontal element unloaded successfully");
@@ -376,7 +591,7 @@ void UnloadRayTeX(RayTeX tex)
     case TEXMODE_VERTICAL:
         for (int i = 0; i < tex.vertical.elementCount; ++i)
         {
-            UnloadRayTeX(tex.vertical.content[i]);
+            UnloadAndFreeRayTeXRefIfOwned(tex.vertical.content[i]);
         }
         RL_FREE(tex.vertical.content);
         TRACELOG(LOG_INFO, "RAYTEX: TeX vertical element unloaded successfully");
@@ -385,7 +600,7 @@ void UnloadRayTeX(RayTeX tex)
     case TEXMODE_MATRIX:
         for (int i = 0; i < tex.matrix.rowCount * tex.matrix.columnCount; ++i)
         {
-            UnloadRayTeX(tex.matrix.content[i]);
+            UnloadAndFreeRayTeXRefIfOwned(tex.matrix.content[i]);
         }
         RL_FREE(tex.matrix.content);
         TRACELOG(LOG_INFO, "RAYTEX: TeX matrix element unloaded successfully");
@@ -395,94 +610,94 @@ void UnloadRayTeX(RayTeX tex)
     }
 }
 
-void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color)
+static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, float fontSize, Color color)
 {
-    if (tex.isOverridingColor) color = tex.overrideColor;
-    if (tex.isOverridingFontSize) fontSize = tex.overrideFontSize;
-    if (tex.overrideFont != NULL) font = *tex.overrideFont;
+    if (tex->isOverridingColor) color = tex->overrideColor;
+    if (tex->isOverridingFontSize) fontSize = (float)tex->overrideFontSize;
+    if (tex->overrideFont != NULL) font = tex->overrideFont;
 
-    switch (tex.mode)
+    switch (tex->mode)
     {
+    case TEXMODE_SPACE:
+    case TEXMODE_VSPACE:
+        break;
+
     case TEXMODE_TEXT:
-        DrawText(tex.text.content, x, y, fontSize, color);
+        DrawTextEx(*font, tex->text.content, position, fontSize, fontSize / 10, color);
         break;
 
     case TEXMODE_SYMBOL:
-        DrawRayTeXSymbol(tex.symbol.content, x, y, fontSize, color);
+        DrawRayTeXSymbolEx(*font, tex->symbol.content, position, fontSize, color);
         break;
 
     case TEXMODE_FRAC:
     {
-        RayTeX numerator = tex.frac.content[TEX_FRAC_NUMERATOR];
-        RayTeX denominator = tex.frac.content[TEX_FRAC_DENOMINATOR];
-        int numeratorHeight = MeasureRayTeXHeight(numerator, fontSize);
+        RayTeX *numerator = tex->frac.content[TEX_FRAC_NUMERATOR].ptr;
+        RayTeX *denominator = tex->frac.content[TEX_FRAC_DENOMINATOR].ptr;
+        
+        Vector2 size = rMeasureRayTeX(font, tex, fontSize);
+        Vector2 numeratorSize = rMeasureRayTeX(font, numerator, fontSize);
+        Vector2 denominatorSize = rMeasureRayTeX(font, denominator, fontSize);
 
-        int width = MeasureRayTeXWidthEx(font, tex, fontSize);
+        float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
 
-        int numeratorWidth = MeasureRayTeXWidthEx(font, numerator, fontSize);
-        int numeratorPaddingLeft = (width - numeratorWidth) / 2;
+        Vector2 numeratorPosition = { 0 };
+        numeratorPosition.x = position.x + (size.x - numeratorSize.x) / 2.0f;
+        numeratorPosition.y = position.y;
+        rDrawRayTeX(font, numerator, numeratorPosition, fontSize, color);
 
-        int denominatorWidth = MeasureRayTeXWidthEx(font, denominator, fontSize);
-        int denominatorPaddingLeft = (width - denominatorWidth) / 2;
+        Rectangle ruleRec = { 0 };
+        ruleRec.x = position.x;
+        ruleRec.y = position.y + numeratorSize.y + spacing;
+        ruleRec.width = size.x;
+        ruleRec.height = MU_TO_PIXELS((float)TEXFRAC_THICKNESS, fontSize);
+        DrawRectangleRec(ruleRec, color);
 
-        DrawRayTeXEx(
-            font,
-            numerator,
-            x + numeratorPaddingLeft,
-            y,
-            fontSize, color);
+        Vector2 denominatorPosition = { 0 };
+        denominatorPosition.x = position.x + (size.x - denominatorSize.x) / 2.0f;
+        denominatorPosition.y = ruleRec.y + ruleRec.height + spacing;
+        rDrawRayTeX(font, denominator, denominatorPosition, fontSize, color);
 
-        DrawRectangle(
-            x,
-            y + numeratorHeight + tex.frac.spacing,
-            width,
-            TEXFRAC_THICKNESS,
-            color);
-
-        DrawRayTeXEx(
-            font,
-            denominator,
-            x + denominatorPaddingLeft,
-            y + numeratorHeight + tex.frac.spacing * 2 + TEXFRAC_THICKNESS,
-            fontSize, color);
     }
         break;
 
     case TEXMODE_HORIZONTAL:
     {
-        const TeXAlign alignContent = tex.horizontal.alignContent;
+        const TeXAlign alignContent = tex->horizontal.alignContent;
         if (alignContent == HORIZONTAL_TEXALIGN_TOP)
         {
-            for (int i = 0; i < tex.horizontal.elementCount; ++i)
+            for (int i = 0; i < tex->horizontal.elementCount; ++i)
             {
-                const RayTeX element = tex.horizontal.content[i];
-                const int width = MeasureRayTeXWidthEx(font, element, fontSize);
-                DrawRayTeXEx(font, element, x, y, fontSize, color);
-                x += width;
+                const RayTeX *element = tex->horizontal.content[i].ptr;
+                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+                rDrawRayTeX(font, element, position, fontSize, color);
+                position.x += size.x;
             }
         }
         else
         {
-            int horizontalHeight = MeasureRayTeXHeightEx(font, tex, fontSize);
-            for (int i = 0; i < tex.horizontal.elementCount; ++i)
+            Vector2 horizontalSize = rMeasureRayTeX(font, tex, fontSize);
+            for (int i = 0; i < tex->horizontal.elementCount; ++i)
             {
-                RayTeX element = tex.horizontal.content[i];
-                int width = MeasureRayTeXWidthEx(font, element, fontSize);
-                int height = MeasureRayTeXHeightEx(font, element, fontSize);
-                int yOffset;
+                RayTeX *element = tex->horizontal.content[i].ptr;
+                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+                float yOffset;
                 switch (alignContent)
                 {
                 case HORIZONTAL_TEXALIGN_CENTER:
-                    yOffset = (horizontalHeight - height) / 2;
+                    yOffset = (horizontalSize.y - size.y) / 2;
                     break;
                 case HORIZONTAL_TEXALIGN_BOTTOM:
-                    yOffset = horizontalHeight - height;
+                    yOffset = horizontalSize.y - size.y;
                     break;
 
                 default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown align [%i]", alignContent);
                 }
-                DrawRayTeXEx(font, element, x, y + yOffset, fontSize, color);
-                x += width;
+                Vector2 positionWithOffset = { 0 };
+                positionWithOffset.x = position.x;
+                positionWithOffset.y = position.y + yOffset;
+                rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
+                position.x += size.x;
             }
         }
     }
@@ -490,39 +705,41 @@ void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color
 
     case TEXMODE_VERTICAL: // todo
     {
-        const TeXAlign alignContent = tex.vertical.alignContent;
+        const TeXAlign alignContent = tex->vertical.alignContent;
         if (alignContent == VERTICAL_TEXALIGN_LEFT)
         {
-            for (int i = 0; i < tex.vertical.elementCount; ++i)
+            for (int i = 0; i < tex->vertical.elementCount; ++i)
             {
-                const RayTeX element = tex.vertical.content[i];
-                const int width = MeasureRayTeXWidthEx(font, element, fontSize);
-                DrawRayTeXEx(font, element, x, y, fontSize, color);
-                x += width;
+                const RayTeX *element = tex->vertical.content[i].ptr;
+                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+                rDrawRayTeX(font, element, position, fontSize, color);
+                position.x += size.x;
             }
         }
         else
         {
-            int verticalWidth = MeasureRayTeXWidthEx(font, tex, fontSize);
-            for (int i = 0; i < tex.vertical.elementCount; ++i)
+            Vector2 verticalSize = rMeasureRayTeX(font, tex, fontSize);
+            for (int i = 0; i < tex->vertical.elementCount; ++i)
             {
-                RayTeX element = tex.vertical.content[i];
-                int width = MeasureRayTeXWidthEx(font, element, fontSize);
-                int height = MeasureRayTeXHeightEx(font, element, fontSize);
-                int xOffset;
+                const RayTeX *element = tex->vertical.content[i].ptr;
+                const Vector2 size = rMeasureRayTeX(font, element, fontSize);
+                float xOffset;
                 switch (alignContent)
                 {
                 case VERTICAL_TEXALIGN_CENTER:
-                    xOffset = (verticalWidth - width) / 2;
+                    xOffset = (verticalSize.x - size.x) / 2;
                     break;
                 case VERTICAL_TEXALIGN_RIGHT:
-                    xOffset = verticalWidth - width;
+                    xOffset = verticalSize.x - size.x;
                     break;
 
                 default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown align [%i]", alignContent);
                 }
-                DrawRayTeXEx(font, element, x + xOffset, y, fontSize, color);
-                y += height;
+                Vector2 positionWithOffset = { 0 };
+                positionWithOffset.x = position.x + xOffset;
+                positionWithOffset.y = position.y;
+                rDrawRayTeX(font, element, positionWithOffset, fontSize, color);
+                position.y += size.y;
             }
         }
     }
@@ -532,20 +749,8 @@ void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color
         TRACELOG(LOG_WARNING, "RAYTEX: TEXMODE_MATRIX draw not yet implemented");
         break;
 
-    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex.mode);
+    default: TRACELOG(LOG_WARNING, "RAYTEX: Unknown mode [%i]", tex->mode);
     }
-}
-
-void DrawRayTeXCenteredEx(Font font, RayTeX tex, int x, int y, int width, int height, int fontSize, Color color)
-{
-    int texWidth  = MeasureRayTeXWidth (tex, fontSize);
-    int texHeight = MeasureRayTeXHeight(tex, fontSize);
-    DrawRayTeXEx(font, tex, (width - texWidth) / 2, (height - texHeight) / 2, fontSize, color);
-}
-
-void DrawRayTeXCenteredRecEx(Font font, RayTeX tex, Rectangle rec, int fontSize, Color color)
-{
-    DrawRayTeXCenteredEx(font, tex, (int)rec.x, (int)rec.y, (int)rec.width, (int)rec.height, fontSize, color);
 }
 
 void DrawRayTeX(RayTeX tex, int x, int y, int fontSize, Color color)
@@ -553,12 +758,39 @@ void DrawRayTeX(RayTeX tex, int x, int y, int fontSize, Color color)
     DrawRayTeXEx(GetFontDefault(), tex, x, y, fontSize, color);
 }
 
+void DrawRayTeXEx(Font font, RayTeX tex, int x, int y, int fontSize, Color color)
+{
+    Vector2 position = { 0 };
+    position.x = (float)x;
+    position.y = (float)y;
+    rDrawRayTeX(&font, &tex, position, (float)fontSize, color);
+}
+
+static void rDrawRayTeXCentered(const Font *font, const RayTeX *tex, Rectangle rec, float fontSize, Color color)
+{
+    Vector2 texSize = rMeasureRayTeX(font, tex, fontSize);
+    Vector2 position = { 0 };
+    position.x = rec.x + (rec.width - texSize.x) / 2.0f;
+    position.y = rec.y + (rec.height - texSize.y) / 2.0f;
+    rDrawRayTeX(font, tex, position, fontSize, color);
+}
+
 void DrawRayTeXCentered(RayTeX tex, int x, int y, int width, int height, int fontSize, Color color)
 {
-    DrawRayTeXCenteredEx(GetFontDefault(), tex, x, y, width, height, fontSize, color);
+    Rectangle rec = { 0 };
+    rec.x = (float)x;
+    rec.y = (float)y;
+    rec.width = (float)width;
+    rec.height = (float)height;
+    DrawRayTeXCenteredRec(tex, rec, fontSize, color);
 }
 
 void DrawRayTeXCenteredRec(RayTeX tex, Rectangle rec, int fontSize, Color color)
 {
-    DrawRayTeXCenteredRecEx(GetFontDefault(), tex, rec, fontSize, color);
+    DrawRayTeXCenteredPro(GetFontDefault(), tex, rec, (float)fontSize, color);
+}
+
+void DrawRayTeXCenteredPro(Font font, RayTeX tex, Rectangle rec, float fontSize, Color color)
+{
+    rDrawRayTeXCentered(&font, &tex, rec, fontSize, color);
 }
