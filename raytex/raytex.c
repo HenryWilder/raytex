@@ -692,7 +692,7 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
                 float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
                 const Vector2 numeratorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
                 const Vector2 denominatorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
-                float excess = (numeratorSize.y - denominatorSize.y + spacing) / 2;
+                float excess = (numeratorSize.y - denominatorSize.y + spacing + TEXFRAC_THICKNESS / 2.0f) / 2;
                 if (excess > yOffsetExtra) yOffsetExtra = excess;
             }
         }
@@ -708,7 +708,7 @@ static void rDrawRayTeX(const Font *font, const RayTeX *tex, Vector2 position, f
                 float spacing = MU_TO_PIXELS((float)TEXFRAC_SPACING, fontSize);
                 const Vector2 numeratorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_NUMERATOR].ptr, fontSize);
                 const Vector2 denominatorSize = rMeasureRayTeX(font, element->frac.content[TEX_FRAC_DENOMINATOR].ptr, fontSize);
-                yOffset = yOffset - (numeratorSize.y - denominatorSize.y + spacing) / 2;
+                yOffset = yOffset - (numeratorSize.y - denominatorSize.y + spacing + TEXFRAC_THICKNESS / 2.0f) / 2;
             }
             Vector2 positionWithOffset = { 0 };
             positionWithOffset.x = position.x;
